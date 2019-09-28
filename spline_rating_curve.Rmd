@@ -1,0 +1,79 @@
+---
+title: "Bayesian Rating Curve"
+author: "Dave Holtschlag"
+date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library( "rethinking" )
+options(mc.cores = parallel::detectCores())
+library(dataRetrieval)
+library(tidyverse)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Specify Streamgage for analysis
+
+```{r specify_Gage}
+gageInfo  <- readNWISsite('04112500')
+
+# print(t(gageInfo))
+
+siteNo    <- gageInfo$site_no
+
+```
+
+## Read in rating and flow measurements
+
+```{r read_rating_data}
+# Rating curve at the selected site.  The 'exsa' parameter is an extended table
+#   provide detailed info on stage discharge
+ratingData <- readNWISrating(siteNo, 'exsa')
+
+# Note: the 'base' rating information provides initial estimates of knot placement
+ratingKnots <- readNWISrating(siteNo, 'base')
+colnames(ratingKnots) <- c('stage', 'flow', 'stor') 
+
+# Rename fields to convention reference
+# colnames(ratingData) <- c('stage','shift','flow')
+
+measData   <- readNWISmeas(siteNo, expanded = TRUE, convertType = TRUE)
+
+measData <- measData %>% 
+  rename('stage'        = 'gage_height_va',
+         'flow'         = 'discharge_va',
+         'quality'      = 'measured_rating_diff') %>% 
+  filter(quality       != 'Unspecified',
+         !is.na(quality)) %>% 
+  mutate(quality        = as.factor(quality))
+
+```
+
+## Plot Rating and Measurements
+
+```{r plot_rating}
+
+ratingData %>% 
+  ggplot( aes(x = flow, y = stage)) +
+  geom_line( color = 'blue') + 
+  geom_point(data = measData, aes(y = stage, x = flow, 
+                                  color = quality)) +
+  geom_point(data = ratingKnots, aes(y = stage, x = flow),
+             colors = 'orange', shape = 2) +
+  theme_bw() +
+  scale_x_continuous(name   = 'Flow, in cubic feet per second',
+                     trans  = "identity") +
+  scale_y_continuous(name   = "Stage, in feet",
+                     trans  = "identity") +
+  ggtitle(label = paste('Figure 1. Stage-flow relation at streamgage',gageInfo$site_no, gageInfo$station_nm))
+```
+
+## Frequency of measurement qualities
+
+```{r table_quality}
+
+print(table(measData$quality))
+
+```
+
