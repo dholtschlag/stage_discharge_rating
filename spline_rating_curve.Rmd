@@ -10,6 +10,11 @@ library( "rethinking" )
 options(mc.cores = parallel::detectCores())
 library(dataRetrieval)
 library(tidyverse)
+library(ggthemes)
+library(splines)
+library(mgcv)
+# Package expss contains the function vlookup
+library(expss)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -29,11 +34,13 @@ siteNo    <- gageInfo$site_no
 ```{r read_rating_data}
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
 #   provide detailed info on stage discharge
-ratingData <- readNWISrating(siteNo, 'exsa')
+ratingData <- readNWISrating(siteNo, 'exsa') %>% 
+  rename('flow'         = 'DEP',
+         'stage'        = 'INDEP') 
 
 # Note: the 'base' rating information provides initial estimates of knot placement
-ratingKnots <- readNWISrating(siteNo, 'base')
-colnames(ratingKnots) <- c('stage', 'flow', 'stor') 
+# ratingKnots <- readNWISrating(siteNo, 'base')
+# colnames(ratingKnots) <- c('stage', 'flow', 'stor') 
 
 # Rename fields to convention reference
 # colnames(ratingData) <- c('stage','shift','flow')
@@ -46,34 +53,345 @@ measData <- measData %>%
          'quality'      = 'measured_rating_diff') %>% 
   filter(quality       != 'Unspecified',
          !is.na(quality)) %>% 
-  mutate(quality        = as.factor(quality))
+  mutate(quality        = ordered(quality, levels = c('Excellent', 'Good', 'Fair', 'Poor'))) %>% 
+  arrange( stage )
+  
+  
+# Only cases where flow and stage are measured
+measData <- measData[complete.cases(measData$stage, measData$flow),]
+
+# Add small uniform random number to stage for uniqueness
+measData <- measData %>% 
+  mutate(log_stage_ = log_stage + runif(nrow(measData), -0.000049, 0.000049)) %>% 
+  arrange(log_stage_)
+
+measSumm <- measData %>% 
+  group_by( log_stage ) %>% 
+  dplyr::summarize( mean_log_flow = mean(log_flow),
+                    sd_log_flow   = sd(log_flow),
+                    cnt_log_flow  = n() )
+
+  
+# Generate alternative knots based on measurement data and equally spaced
+# measurements in log10 space.
+
+# ratingKnots <- data.frame(
+#   stage_knots <- seq(from       = sqrt(min(measData$stage)),
+#                      to         = sqrt(max(measData$stage)),
+#                      length.out = 7)^2)
+# 
+# 
+# 
+# ratingKnots$flow_alt  <- approx(measData$stage, measData$flow,
+#                                 ratingKnots$stage_alt, ties = mean, 
+#                                 rule = 2)$y
+
+num_knots   <- 11
+
+# Did not like quantile estimator of knots because curvature was disregarded
+# knot_list   <- quantile( measData$stage, probs = (seq(0, 1, length.out = num_knots)^0.5) )
+v <- 1.5
+knot_list   <- 10^(10^(seq(log10(log10(min(measData$stage)-v)),
+                           log10(log10(max(measData$stage)-v)), length.out = num_knots))) + v
+ratingKnots <- data.frame( stage_knots = knot_list )
+
 
 ```
 
+## Plot empirical distributions of measured flow and stage
+
+
+```{r dist_flow, fig.cap = 'Figure 1. Distributin of Measured Flows'}
+
+measData %>% 
+  ggplot( aes(log10(flow)) ) +
+  geom_density(fill = 'blue', color = 'blue', alpha = 0.2, show.legend = TRUE) +
+  stat_function(fun  = dnorm, 
+                args = list( mean = mean(log10(measData$flow)),
+                             sd   =   sd(log10(measData$flow))),
+                  lwd = 1, color = 'purple', show.legend = TRUE) +
+  theme_bw() + 
+  xlab('Log10 of Measured Flow, in cubic feet per second') +
+  ylab('Probability Density')
+
+```
+
+## Distribution of Stage
+
+
+```{r dist_flow, fig.cap = 'Figure 2. Distributin of Measured Stages'}
+
+# Gamma distribution is questionable applicable because of arbitrary offset
+# Fit gamma distribution
+fit.gamma.logstage <- fitdist(log10(measData$stage)-min(log10(measData$stage))+.0001,
+                              distr = 'gamma', method = 'mle')
+
+summary(fit.gamma.logstage)
+
+measData %>% 
+  ggplot( aes(log10(stage)-min(log10(stage))),  color = 'blue' ) +
+  geom_density(fill = 'blue', alpha = 0.2, show.legend = TRUE) +
+  stat_function(fun   = dgamma, 
+                args  = list(shape = fit.gamma.logstage$estimate[[1]],
+                             rate  = fit.gamma.logstage$estimate[[2]])) +
+                #              sd   =   sd(log10(measData$stage))),
+                #  lwd = 1, color = 'purple', show.legend = TRUE) +
+  theme_bw() + 
+  xlab('Log10 of Measured Stage minus point of zero flow offset, in feet') +
+  ylab('Probability Density')
+
+```
+
+
+
 ## Plot Rating and Measurements
 
-```{r plot_rating}
+```{r plot_rating, fig.height = 7}
 
 ratingData %>% 
-  ggplot( aes(x = flow, y = stage)) +
+  ggplot( aes(y = flow, x = stage)) +
   geom_line( color = 'blue') + 
-  geom_point(data = measData, aes(y = stage, x = flow, 
+  geom_point(data = measData, aes(x = stage, y = flow, 
                                   color = quality)) +
-  geom_point(data = ratingKnots, aes(y = stage, x = flow),
-             colors = 'orange', shape = 2) +
+  # geom_point(data = ratingKnots, aes(x = stage, y = flow),
+  #             olor = 'black', shape = 4, size = 5) +
+  
+  geom_vline(data = ratingKnots, aes(xintercept = stage_knots), 
+             color = 'salmon', linetype = 'dashed' ) +
+
+  # geom_point(data = ratingKnots, aes(x = stage_alt, y = flow_alt),
+  #            color = 'red',   shape = 3, size = 5 ) +
+  
   theme_bw() +
-  scale_x_continuous(name   = 'Flow, in cubic feet per second',
-                     trans  = "identity") +
-  scale_y_continuous(name   = "Stage, in feet",
-                     trans  = "identity") +
+  theme(legend.position = "bottom") +
+ 
+  scale_y_continuous(name   = 'Flow, in cubic feet per second',
+                     trans  = "log10",
+                     breaks = c(1, 10, 50, 100, 200, 500, 1000, 2000, 4000, 6000)) +
+  scale_x_continuous(name   = "Stage, in feet",
+                     trans  = "log10",
+                     breaks = c(seq(3, 12, by = 1))) +
   ggtitle(label = paste('Figure 1. Stage-flow relation at streamgage',gageInfo$site_no, gageInfo$station_nm))
 ```
 
 ## Frequency of measurement qualities
 
+The quality of measurements may need to be recomputed based on the rating in place at the time of measurement.
+
 ```{r table_quality}
 
+measData$flow_exp <- approx( ratingData$stage, ratingData$flow, xout = measData$stage, rule = 2 )$y
+
+measData$flow_err <- (measData$flow - measData$flow_exp) / (measData$flow_exp) * 100.
+
+# Frequency of measurement qualities
 print(table(measData$quality))
+
+
+measData %>% 
+  ggplot( aes( quality, flow_err) ) +
+  geom_boxplot() +
+  xlab('Rated Quality of Measurement') +
+  ylab('Percent error in flow measurement') +
+  geom_hline( aes(yintercept = 0) , color = 'red', linetype = 'dashed' )
+
 
 ```
 
+## Distribution of Square root of measured flow
+
+```{r flow_dist}
+
+dens( log10(measData$flow), norm.comp = TRUE )
+
+
+```
+
+## Bayesian spline regression model with uncertainty in stage
+
+
+```{r bayes_spline}
+
+measData <- measData %>% 
+  mutate( log_flow = log10(flow), log_stage = log10(stage))
+
+log_stage <- measData$log_stage_
+log_flow  <- measData$log_flow
+
+
+Gspline <- s(log_stage, bs = 'cr')
+
+# gam(eval(parse(text='log_flow ~ s(log_stage)')))
+
+Gmodel  <- gam(log_flow ~ eval(Gspline$label) )
+
+tmp2    <- gam(eval(parse(text='log_flow ~ s(log_stage)')))
+
+Gmodel  <- gam(log_flow ~ s(log_stage))
+
+# Gmodel  <- gam(log_flow ~ s(log_stage, bs = 'cr'))
+
+Bspline <- bs(log_stage , 
+              # knots = knot_list,
+              # knots = knot_list[-c(1, num_knots)],
+              df     = 9,
+              degree = 3, intercept = TRUE)
+
+
+m_bs_reg_02 <- quap(
+  alist(
+    log_flow ~  dnorm( mu, sigma ),
+    mu       <- a + G %*% w,
+    a        ~  dnorm( 2, 1.5 ),
+    w        ~  dnorm( 0, 1   ),
+    sigma    ~  dexp(1)
+  ),
+  data = list( log_flow = log_flow, log_stage = log_stage, G = Gmodel$smooth[[1]]$UZ),
+  start = list(w = rep( 0, Gmodel$rank))
+)
+
+precis( m_bs_reg_02, depth = 2, prob = 0.95, digits = 5)
+
+```
+
+## Evaluate spline model
+
+```{r eval_bs}
+
+stage.seq <- seq(from = min(measData$log_stage), to = max(measData$log_stage), length = 200)
+
+stage.mu  <- link( m_bs_reg_02)
+
+# Find minimum difference between entry in 
+meas_data_ndx <- rep(NA, length(stage.seq))
+for (i in 1:length(stage.seq)){
+  adiff <- abs(stage.seq[i] - log_stage)
+  meas_data_ndx[i] <- which.min(adiff)
+  print( paste(i, ndx, adiff[ndx]))
+}
+
+# summarize the distribution of stage.mu
+mu.mean <- apply( stage.mu[,meas_data_ndx] , 2 , mean )
+mu.PI   <- apply( stage.mu[,meas_data_ndx] , 2 , PI , prob=0.95 )
+
+smooth.spline(x = log_stage, y = log_flow)
+# , w = NULL, df = measData, lambda = NULL, cv = FALSE,
+#               all.knots = FALSE, nknots = .nknots.smspl,
+#               keep.data = TRUE, df.offset = 0, penalty = 1,
+#               control.spar = list(), tol = 1e-6 * IQR(log_stage), keep.stuff = FALSE)
+
+require(graphics)
+plot(dist ~ speed, data = cars, main = "data(cars)  &  smoothing splines")
+cars.spl <- with(cars, smooth.spline(speed, dist))
+cars.spl
+## This example has duplicate points, so avoid cv = TRUE
+
+lines(cars.spl, col = "blue", lwd = 2)
+ss10 <- smooth.spline(cars[,"speed"], cars[,"dist"], df = 10)
+lines(ss10, lty = 2, col = "red")
+legend(5,120,c(paste("default [C.V.] => df =",round(cars.spl$df,1)),
+               "s( * , df = 10)"), col = c("blue","red"), lty = 1:2,
+       bg = 'bisque')
+
+
+
+plot(log_flow ~ log_stage, data = measData, main = "data(cars)  &  smoothing splines",
+     col = 'grey')
+rate1.spl <- with(measData, smooth.spline(log_stage, log_flow))
+rate1.spl
+## This example has duplicate points, so avoid cv = TRUE
+
+lines(rate1.spl, col = "blue", lwd = 2)
+rate2.spl <- smooth.spline(measData[,"log_stage"], measData[,"log_flow"], df = 8)
+lines(rate2.spl, lty = 2, col = "red")
+
+legend(5,120,c(paste("default [C.V.] => df =",round(cars.spl$df,1)),
+               "s( * , df = 10)"), col = c("blue","red"), lty = 1:2,
+       bg = 'bisque')
+
+
+# plot raw data
+# fading out points to make line and interval more visible
+plot( log_flow ~ log_stage , data=measData , col=col.alpha(rangi2,0.5) )
+# plot the MAP line, aka the mean mu for each weight
+lines( stage.seq , mu.mean )
+# plot a shaded region for 89% PI
+shade( mu.PI , stage.seq )
+
+
+# pred      <- link( m_bs_reg_01, data = measData  )
+# 
+# 
+# post <- extract.samples(m_bs_reg_01)
+# w <- apply( post$w , 2 , mean )
+# plot( NULL , xlim=range(tmp$log_stage) , ylim=c(-5,5) ,
+# xlab="year" , ylab="basis * weight" )
+# for ( i in 1:ncol(Bspline) ) lines( tmp$log_stage , w[i]*Bspline[,i] )
+# 
+# mu <- link( m_bs_reg_01 )
+# mu_PI <- apply(mu,2,PI,0.95)
+# plot( tmp$log_stage , tmp$log_flow , col=col.alpha(rangi2,0.3) , pch=16 )
+# shade( mu_PI , tmp$log_stage , col=col.alpha("black",0.5) )
+
+
+```
+
+## GAM models using mgcv
+
+```{r simple_gam}
+
+ct1 <- gam(Volume ~ s(Height), family=Gamma(link=log), data = trees)
+print(ct1)
+
+ pd <- data.frame(Height=c(75,80),Girth=c(12,13))
+ 
+ predict(ct1,newdata=pd,se=TRUE)
+ 
+ Xp <- predict(ct1,newdata=pd,type="lpmatrix")
+ 
+ Xp %*% coef(ct1)
+ 
+```
+
+
+```{r gam_rate}
+
+measData <- measData %>% 
+  mutate( log_flow = log10(flow), log_stage = log10(stage))
+
+log_stage <- measData$log_stage_
+log_flow  <- measData$log_flow
+
+gam_spline <- gam(log_flow ~ s(log_stage), data = measData, method = "ML")
+measData$gam_hat <- gam_spline$fitted.values
+
+
+measData %>% 
+  ggplot( aes( x = log_stage, y = log_flow)) +
+  geom_point() +
+  geom_line( aes( x = log_stage, y = gam_hat), color = 'red')
+
+
+plot(gam_spline)
+
+m_bs_reg_01 <- quap(
+  alist(
+    log_flow ~  dnorm( mu, sigma ),
+    mu       <- a + Bspline %*% w,
+    a        ~  dnorm( 2, 1.5 ),
+    w        ~  dnorm( 0, 1   ),
+    sigma    ~  dexp(1)
+  ),
+  data = list( log_flow = log_flow, log_stage = log_stage, B = Bspline),
+  start = list(w = rep( 0, ncol(Bspline)))
+)
+
+precis( m_bs_reg_01, depth = 2, prob = 0.95, digits = 5)
+
+
+
+
+```
+
+
+}
