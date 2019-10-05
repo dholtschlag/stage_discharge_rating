@@ -13,6 +13,9 @@ library(tidyverse)
 library(ggthemes)
 library(splines)
 library(mgcv)
+library(fitdistrplus)
+library(stringr)
+library(kableExtra)
 # Package expss contains the function vlookup
 library(expss)
 knitr::opts_chunk$set(echo = TRUE)
@@ -27,11 +30,13 @@ gageInfo  <- readNWISsite('04112500')
 
 siteNo    <- gageInfo$site_no
 
+siteName  <- str_to_title( gageInfo$station_nm )
+
 ```
 
 ## Read in rating and flow measurements
 
-```{r read_rating_data}
+```{r read_rating_meas_data}
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
 #   provide detailed info on stage discharge
 ratingData <- readNWISrating(siteNo, 'exsa') %>% 
@@ -48,28 +53,69 @@ ratingData <- readNWISrating(siteNo, 'exsa') %>%
 measData   <- readNWISmeas(siteNo, expanded = TRUE, convertType = TRUE)
 
 measData <- measData %>% 
-  rename('stage'        = 'gage_height_va',
-         'flow'         = 'discharge_va',
-         'quality'      = 'measured_rating_diff') %>% 
-  filter(quality       != 'Unspecified',
-         !is.na(quality)) %>% 
-  mutate(quality        = ordered(quality, levels = c('Excellent', 'Good', 'Fair', 'Poor'))) %>% 
-  arrange( stage )
-  
-  
+  rename('stage'     = 'gage_height_va',
+         'flow'      = 'discharge_va',
+         'Quality'   = 'measured_rating_diff',
+         'Control'   = 'control_type_cd')      %>% 
+  filter(Quality    != 'Unspecified' | Quality == !is.na(Quality)) %>%
+  mutate('Quality'   =  ordered(Quality, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
+         'log_flow' = log10(flow),
+         'log_stage' = log10(stage))
+
+# Populate field to combine similar Control attributes
+measData$Control_Degree <- measData$Control
+measData$Control_Degree  = case_when(str_detect(measData$Control, 'Heavy')       ~ 'Heavy',
+                                     str_detect(measData$Control, 'Moderate')    ~ 'Moderate',
+                                     str_detect(measData$Control, 'Light'   )    ~ 'Light',
+                                     str_detect(measData$Control, 'Clear'   )    ~ 'Clear',
+                                     str_detect(measData$Control, 'Ice'     )    ~ 'Ice',
+                                     str_detect(measData$Control, 'Unspecifed')  ~ 'Unspecifed')
+
+measData$Control_Degree = ordered(measData$Control_Degree,
+                                  levels = c('Unspecifed', 'Clear', 'Light', 'Moderate', 
+                                             'Heavy', 'Ice'))
+
 # Only cases where flow and stage are measured
 measData <- measData[complete.cases(measData$stage, measData$flow),]
 
-# Add small uniform random number to stage for uniqueness
+print(paste('There are',nrow(measData),'stage values, but only', 
+            length(unique(measData$log_stage)), 'of these values are unique.'))
+
+# Create version of log_stage with small uniform random number for uniqueness
+#   Uniqueness ensures that each measurement is used even with stage values
+#   rounded to the 100th of a foot.  The uniqueness helps in the application to
+#   a matrix multiply in the Bayesian estimation.
+#  Random seed is set to facilitate reproducibility
+set.seed(3472792)
 measData <- measData %>% 
-  mutate(log_stage_ = log_stage + runif(nrow(measData), -0.000049, 0.000049)) %>% 
+  mutate(log_stage_ = log_stage + runif(nrow(measData), -0.0000049, 0.0000049)) %>% 
   arrange(log_stage_)
 
+```
+
+## Summarize measurement data
+
+
+```{r summ_meas_data}
 measSumm <- measData %>% 
   group_by( log_stage ) %>% 
   dplyr::summarize( mean_log_flow = mean(log_flow),
                     sd_log_flow   = sd(log_flow),
+                    ivar_log_flow = 1 / sd(log_flow)^2,
                     cnt_log_flow  = n() )
+
+table(measSumm$cnt_log_flow)
+
+kable(measSumm) %>% 
+  kable_styling() %>% 
+  scroll_box(width = "700px", height = "500px")
+
+# measSumm %>% 
+#   ggplot( aes( x = cnt_log_flow, y = ivar_log_flow)) +
+#   geom_point() +
+#   theme_bw() +
+#   scale_y_continuous( trans = 'log10')
+
 
   
 # Generate alternative knots based on measurement data and equally spaced
@@ -86,32 +132,32 @@ measSumm <- measData %>%
 #                                 ratingKnots$stage_alt, ties = mean, 
 #                                 rule = 2)$y
 
-num_knots   <- 11
+# num_knots   <- 11
 
 # Did not like quantile estimator of knots because curvature was disregarded
 # knot_list   <- quantile( measData$stage, probs = (seq(0, 1, length.out = num_knots)^0.5) )
-v <- 1.5
-knot_list   <- 10^(10^(seq(log10(log10(min(measData$stage)-v)),
-                           log10(log10(max(measData$stage)-v)), length.out = num_knots))) + v
-ratingKnots <- data.frame( stage_knots = knot_list )
+# v <- 1.5
+# knot_list   <- 10^(10^(seq(log10(log10(min(measData$stage)-v)),
+#                            log10(log10(max(measData$stage)-v)), length.out = num_knots))) + v
+# ratingKnots <- data.frame( stage_knots = knot_list )
 
 
 ```
 
-## Plot empirical distributions of measured flow and stage
+## Plot empirical distributions of measured flow 
 
 
-```{r dist_flow, fig.cap = 'Figure 1. Distributin of Measured Flows'}
+```{r dist_flow, fig.cap = 'Figure 4. Distribution of Measured Log_10 Flows with Normal'}
 
 measData %>% 
-  ggplot( aes(log10(flow)) ) +
+  ggplot( aes(log_flow) ) +
   geom_density(fill = 'blue', color = 'blue', alpha = 0.2, show.legend = TRUE) +
   stat_function(fun  = dnorm, 
                 args = list( mean = mean(log10(measData$flow)),
                              sd   =   sd(log10(measData$flow))),
                   lwd = 1, color = 'purple', show.legend = TRUE) +
   theme_bw() + 
-  xlab('Log10 of Measured Flow, in cubic feet per second') +
+  xlab('Log_{10} of Measured Flow, in cubic feet per second') +
   ylab('Probability Density')
 
 ```
@@ -119,7 +165,7 @@ measData %>%
 ## Distribution of Stage
 
 
-```{r dist_flow, fig.cap = 'Figure 2. Distributin of Measured Stages'}
+```{r dist_flow, fig.cap = 'Figure 5. Distribution of log10 Measured Stages with Gamma Distribution'}
 
 # Gamma distribution is questionable applicable because of arbitrary offset
 # Fit gamma distribution
@@ -129,7 +175,7 @@ fit.gamma.logstage <- fitdist(log10(measData$stage)-min(log10(measData$stage))+.
 summary(fit.gamma.logstage)
 
 measData %>% 
-  ggplot( aes(log10(stage)-min(log10(stage))),  color = 'blue' ) +
+  ggplot( aes(log_stage - min(log10(stage))),  color = 'blue' ) +
   geom_density(fill = 'blue', alpha = 0.2, show.legend = TRUE) +
   stat_function(fun   = dgamma, 
                 args  = list(shape = fit.gamma.logstage$estimate[[1]],
@@ -146,18 +192,18 @@ measData %>%
 
 ## Plot Rating and Measurements
 
-```{r plot_rating, fig.height = 7}
+```{r plot_meas_Quality, fig.height = 7}
 
 ratingData %>% 
   ggplot( aes(y = flow, x = stage)) +
   geom_line( color = 'blue') + 
   geom_point(data = measData, aes(x = stage, y = flow, 
-                                  color = quality)) +
+                                  color = Quality)) +
   # geom_point(data = ratingKnots, aes(x = stage, y = flow),
   #             olor = 'black', shape = 4, size = 5) +
   
-  geom_vline(data = ratingKnots, aes(xintercept = stage_knots), 
-             color = 'salmon', linetype = 'dashed' ) +
+  # geom_vline(data = ratingKnots, aes(xintercept = stage_knots), 
+  #            color = 'salmon', linetype = 'dashed' ) +
 
   # geom_point(data = ratingKnots, aes(x = stage_alt, y = flow_alt),
   #            color = 'red',   shape = 3, size = 5 ) +
@@ -171,8 +217,36 @@ ratingData %>%
   scale_x_continuous(name   = "Stage, in feet",
                      trans  = "log10",
                      breaks = c(seq(3, 12, by = 1))) +
-  ggtitle(label = paste('Figure 1. Stage-flow relation at streamgage',gageInfo$site_no, gageInfo$station_nm))
+  ggtitle(label = paste('Figure 1. Stage-flow relation at streamgage', siteNo, siteName))
 ```
+## Plot Rating and Measurements with Control Characteristics
+
+```{r plot_meas_control, fig.height = 7}
+
+measData %>% 
+  ggplot( aes(y = flow, x = stage)) +
+  geom_point(aes(x = stage, y = flow, 
+                 color = Control_Degree), size = 2, alpha = 0.5) +
+    scale_colour_brewer() +
+  
+  geom_line(data = ratingData, aes(x = stage, y = flow), color = 'darkgreen', width = 2) + 
+  
+  # geom_vline(data = ratingKnots, aes(xintercept = stage_knots), 
+  #            color = 'salmon', linetype = 'dashed' ) +
+  
+  theme_bw() +
+  theme(legend.position = "bottom") +
+ 
+  scale_y_continuous(name   = 'Flow, in cubic feet per second',
+                     trans  = "log10",
+                     breaks = c(1, 10, 50, 100, 200, 500, 1000, 2000, 4000, 6000)) +
+  scale_x_continuous(name   = "Stage, in feet",
+                     trans  = "log10",
+                     breaks = c(seq(3, 12, by = 1))) +
+  ggtitle(label = paste('Figure 1. Stage-flow relation at streamgage', siteNo, siteName,
+                        'showing effects of Controls'))
+```
+
 
 ## Frequency of measurement qualities
 
@@ -219,38 +293,58 @@ log_stage <- measData$log_stage_
 log_flow  <- measData$log_flow
 
 
-Gspline <- s(log_stage, bs = 'cr')
+# Gspline <- s(log_stage, bs = 'cr')
 
 # gam(eval(parse(text='log_flow ~ s(log_stage)')))
 
-Gmodel  <- gam(log_flow ~ eval(Gspline$label) )
+# Gmodel  <- gam(log_flow ~ eval(Gspline$label) )
 
-tmp2    <- gam(eval(parse(text='log_flow ~ s(log_stage)')))
+# tmp2    <- gam(eval(parse(text='log_flow ~ s(log_stage)')))
 
-Gmodel  <- gam(log_flow ~ s(log_stage))
+log_flow_s <- log_flow - mean(log_flow)
+
+Gmodel  <- gam(log_flow ~ s(log_stage), drop.intercept = FALSE)
+
+# plot Gmodel
+plot(log_flow, Gmodel$fitted.values)
+abline( a =0, b = 1, col = 'red')
+
+plot(  log_stage, log_flow, pch = 16)
+lines( log_stage, Gmodel$fitted.values + mean(log_flow), col = 'red', lwd = 2)
+
 
 # Gmodel  <- gam(log_flow ~ s(log_stage, bs = 'cr'))
 
-Bspline <- bs(log_stage , 
-              # knots = knot_list,
-              # knots = knot_list[-c(1, num_knots)],
-              df     = 9,
-              degree = 3, intercept = TRUE)
+# Bspline <- bs(log_stage , 
+#               # knots = knot_list,
+#               # knots = knot_list[-c(1, num_knots)],
+#               df     = 9,
+#               degree = 3, intercept = TRUE)
 
 
 m_bs_reg_02 <- quap(
   alist(
-    log_flow ~  dnorm( mu, sigma ),
-    mu       <- a + G %*% w,
-    a        ~  dnorm( 2, 1.5 ),
-    w        ~  dnorm( 0, 1   ),
-    sigma    ~  dexp(1)
+    log_flow_s ~  dnorm( mu, sigma ),
+    mu        <-  B %*% w,
+  # a          ~  dnorm( 2, 1.5 ),
+    w          ~  dnorm( 0, 1   ),
+    sigma      ~  dexp(1)
   ),
-  data = list( log_flow = log_flow, log_stage = log_stage, G = Gmodel$smooth[[1]]$UZ),
-  start = list(w = rep( 0, Gmodel$rank))
+  data = list( log_flow_s = log_flow_s, log_stage = log_stage, 
+                 B = Gmodel$smooth[[1]]$UZ ) ,
+  start = list(w = rep( 0, 9 ))
 )
 
+# Remove extra two rows of B matrix
+n_bs_reg_02  <- m_bs_reg_02
+n_bs_reg_02@data$B <- m_bs_reg_02@data$B[1:length(log_flow),]
+
+
 precis( m_bs_reg_02, depth = 2, prob = 0.95, digits = 5)
+
+```
+
+
 
 ```
 
@@ -258,9 +352,23 @@ precis( m_bs_reg_02, depth = 2, prob = 0.95, digits = 5)
 
 ```{r eval_bs}
 
-stage.seq <- seq(from = min(measData$log_stage), to = max(measData$log_stage), length = 200)
+post    <- extract.samples( n_bs_reg_02 )
 
-stage.mu  <- link( m_bs_reg_02)
+posta   <- mean(post$a)
+posts   <- mean(post$s)
+postw   <- apply( post$w, 2, mean)
+
+mu   <- link( n_bs_reg_02 )
+
+mu_PI <- apply(mu, 2, PI, 0.95)
+
+plot( measData$log_stage, measData$log_flow, col = col.alpha(rangi2, 0.5))
+
+shade( mu_PI, measData$log_stage, col = col.alpha("black", 0.5))
+
+stage.seq <- seq(from = min(measData$log_stage), to = max(measData$log_stage), length = 100)
+
+stage.mu  <- link( n_bs_reg_02, data = data.frame(log_stage = stage.seq))
 
 # Find minimum difference between entry in 
 meas_data_ndx <- rep(NA, length(stage.seq))
