@@ -16,6 +16,7 @@ library(mgcv)
 library(fitdistrplus)
 library(stringr)
 library(kableExtra)
+library(ggrepel)
 # Package expss contains the function vlookup
 library(expss)
 knitr::opts_chunk$set(echo = TRUE)
@@ -263,7 +264,7 @@ print(table(measData$quality))
 
 
 measData %>% 
-  ggplot( aes( quality, flow_err) ) +
+  ggplot( aes( Quality, flow_err) ) +
   geom_boxplot() +
   xlab('Rated Quality of Measurement') +
   ylab('Percent error in flow measurement') +
@@ -304,43 +305,84 @@ log_flow  <- measData$log_flow
 log_flow_s <- log_flow - mean(log_flow)
 
 Gmodel  <- gam(log_flow ~ s(log_stage), drop.intercept = FALSE)
+Xp      <- predict( Gmodel, type = 'lpmatrix')
 
-# plot Gmodel
-plot(log_flow, Gmodel$fitted.values)
-abline( a =0, b = 1, col = 'red')
+summary(Gmodel)
 
-plot(  log_stage, log_flow, pch = 16)
-lines( log_stage, Gmodel$fitted.values + mean(log_flow), col = 'red', lwd = 2)
+baye_gam <- quap(
+alist(
+log_flow  ~ dnorm( mu , sigma ) ,
+mu       <- Xp %*% w ,
+w         ~ dnorm(0,1),
+sigma     ~ dexp(1)
+),
+data=list( log_flow = log_flow , Xp = Xp ) ,
+start=list( w = rep( 0 , ncol(Xp) ) ) )
+
+# Parameter estimates from Bayesian estimation
+precis( baye_gam, depth = 2, prob = 0.95, digits = 5)
+
+# Compare Bayesian and GAM model parameter estimates
+
+coef_gam <- data.frame( gam_coef = coef(Gmodel), baye_coef = coef(baye_gam)[1:10], 
+                        id     = c('W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10'))
+
+coef_gam %>% 
+  ggplot( aes( x = gam_coef, y = baye_coef, label = id)) +
+  geom_point( color = 'blue', size = 2) +
+  geom_abline( slope = 1, intercept = 0, color = 'red') +
+  geom_label_repel(aes(label = id), size = 2,
+                     box.padding = 0.25, 
+                   point.padding = 0.25,
+                   label.padding = 0.25,
+                  segment.color = 'grey50') +
+  theme_classic() +
+  labs( x = 'GAM Parameter Estimate',  y = 'Bayesian Parameter Estimate')
+  
+plot( coef(Gmodel), coef(baye_gam)[1:10], pch = 16, col = 'red')
 
 
-# Gmodel  <- gam(log_flow ~ s(log_stage, bs = 'cr'))
-
-# Bspline <- bs(log_stage , 
-#               # knots = knot_list,
-#               # knots = knot_list[-c(1, num_knots)],
-#               df     = 9,
-#               degree = 3, intercept = TRUE)
+# Correlation among parameters
+cov2cor( vcov( baye_gam) )
 
 
-m_bs_reg_02 <- quap(
-  alist(
-    log_flow_s ~  dnorm( mu, sigma ),
-    mu        <-  B %*% w,
-  # a          ~  dnorm( 2, 1.5 ),
-    w          ~  dnorm( 0, 1   ),
-    sigma      ~  dexp(1)
-  ),
-  data = list( log_flow_s = log_flow_s, log_stage = log_stage, 
-                 B = Gmodel$smooth[[1]]$UZ ) ,
-  start = list(w = rep( 0, 9 ))
-)
+# Extract parameter estimates
+post   <- extract.samples( baye_gam, n = 1e4 )
+head(post, n = 5)
 
-# Remove extra two rows of B matrix
-n_bs_reg_02  <- m_bs_reg_02
-n_bs_reg_02@data$B <- m_bs_reg_02@data$B[1:length(log_flow),]
+dens( post$sigma, norm.comp=TRUE , main="Distribution of sigma estimates" , show.HPDI=TRUE)
+
+# Link uses the quap approximation, and samples from the posterior distribution, and computes 
+#   µ for each case in the data and sample from the posterior distribution.
+mu     <- link( baye_gam )
+str(mu)
+
+# Generage a sequence of log_stages for analysis
+
+log_stage_seq <- seq( from = min(log_stage), to = max(log_stage), length.out = 50 )
 
 
-precis( m_bs_reg_02, depth = 2, prob = 0.95, digits = 5)
+
+data_seq      <- data.frame( log_stage = log_stage_seq )
+
+Xp_seq        <- predict( Gmodel, newdata = data_seq, type = 'lpmatrix')
+
+mu_seq        <- link( baye_gam, data = list(Xp = Xp_seq))
+
+
+
+
+
+
+
+mu_seq  <- link( baye_gam, data = data.frame( Xp = Xp_new ) )
+
+
+# Compare bayesian estimated parameters with gam model estimates
+
+
+
+
 
 ```
 
