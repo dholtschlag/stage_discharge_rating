@@ -84,7 +84,7 @@ meas_data  <- renameNWISColumns(meas_data)
 
 
 meas_data <- meas_data %>% 
-  rename('stage'         = 'gage_height_va',
+  rename('stage_round'   = 'gage_height_va',
          'flow'          = 'discharge_va',
          'Quality'       = 'measured_rating_diff',
          'Control'       = 'control_type_cd')      %>% 
@@ -92,7 +92,7 @@ meas_data <- meas_data %>%
   mutate('Quality'       =  ordered(Quality, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
          'log_flow'      = log10(flow),
          # rnd refers to the approximation of stage to 0.01 ft.
-         'log_stage_round' = log10(stage))
+         'log_stage_round' = log10(stage_round))
 
 # Populate field to combine similar Control attributes
 meas_data$Control_Degree <- meas_data$Control
@@ -131,8 +131,8 @@ print(paste('There are',nrow(meas_data),'stage values, but only',
 # Setting a random seed for reproducibility
 set.seed(3472792)
 meas_data <- meas_data %>% 
-  mutate( log_stage_uniq   = log_stage_round + runif(nrow(meas_data), -0.0000049, 0.0000049)) %>% 
-  arrange(log_stage_uniq)
+  mutate( log_stage_unique   = log_stage_round + runif(nrow(meas_data), -0.0000049, 0.0000049)) %>% 
+  arrange(log_stage_unique)
 
 ```
 
@@ -151,9 +151,9 @@ meas_summary <- meas_data %>%
                     cnt_log_flow  = n())
 
 meas_summary <- meas_summary %>% 
-  mutate(stage_rnd = 10^log_stage_round,
+  mutate(stage_round = 10^log_stage_round,
   flow_mean = 10^mean_log_flow) %>%  
-  dplyr::select(stage_rnd, everything())
+  dplyr::select(stage_round, everything())
 
 table(meas_summary$cnt_log_flow)
 
@@ -193,13 +193,13 @@ fig_no <- fig_no + 1
 
 # Gamma distribution is questionable applicable because of arbitrary offset
 # Fit gamma distribution
-fit.gamma.logstage <- fitdist(log10(meas_data$stage)-min(log10(meas_data$stage))+.0001,
+fit.gamma.logstage <- fitdist(meas_data$log_stage_unique - min(meas_data$log_stage_unique)+.0001,
                               distr = 'gamma', method = 'mle')
 
 summary(fit.gamma.logstage)
 
 meas_data %>% 
-  ggplot( aes(log_stage_uniq - min(log_stage_uniq))),  color = 'blue' ) +
+  ggplot( aes(log_stage_unique - min(log_stage_unique)),  color = 'blue' ) +
   geom_density(fill = 'blue', alpha = 0.2, show.legend = TRUE) +
   stat_function(fun   = dgamma, 
                 args  = list(shape = fit.gamma.logstage$estimate[[1]],
@@ -226,7 +226,7 @@ fig_no <- fig_no + 1
 rating_data %>% 
   ggplot( aes(y = flow, x = stage)) +
   geom_line( color = 'blue') + 
-  geom_point(data = meas_data, aes(x = stage, y = flow, 
+  geom_point(data = meas_data, aes(x = stage_round, y = flow, 
                                   color = Quality)) +
   theme_bw() +
   theme(legend.position = "bottom") +
@@ -238,14 +238,15 @@ rating_data %>%
                      trans  = "log10",
                      breaks = c(seq(3, 12, by = 1))) +
   ggtitle(label = paste('Figure 5. Stage-flow relation', rating_no, 'at streamgage', site_no, station_nm))
+
 ```
 ## Plot Rating and Measurements with Control Characteristics
 
 ```{r plot_meas_control, fig.height = 7}
 
 meas_data %>% 
-  ggplot( aes(y = flow, x = stage)) +
-  geom_point(aes(x = stage, y = flow, 
+  ggplot( aes(y = flow, x = stage_round)) +
+  geom_point(aes(x = stage_round, y = flow, 
                  color = Control_Degree), size = 2, alpha = 0.5) +
     scale_colour_brewer() +
   
@@ -296,10 +297,10 @@ meas_data %>%
 ### GAM for Stage-Flow Rating
 
 
-```{r gam_estimate_of_rating, fig.height = 7, fig.cap = 'Figure 7. Basis for GAM Smoothing Spline'  }
+```{r gam_estimate_of_rating, fig.height = 7, fig.cap =  }
 
 # Compute GAM 
-Gmodel  <- gam(meas_data$log_flow ~ s(meas_data$log_stage_uniq))
+Gmodel  <- gam(meas_data$log_flow ~ s(meas_data$log_stage_unique))
 
 plot(Gmodel)
 
@@ -318,7 +319,8 @@ Xp      <- predict( Gmodel, type = 'lpmatrix')
    theme_bw()  +
    theme( legend.position = 'bottom') +
    xlab('Basis Row (Sorted by Increasing Stage)') +
-   ylab('Basis Coefficient')
+   ylab('Basis Coefficient') + 
+   labs( title = 'Figure 7. Basis (matrix columns of Xp) for GAM Smoothing Spline' )
   
 
  
@@ -326,18 +328,65 @@ Xp      <- predict( Gmodel, type = 'lpmatrix')
 ```
 
 
-### Bayesian Estimate of Spline Parameters
 
 
-```{r Bayes_parameter_estimates, fig.height = 6}
+### Random Component to log stage values modelled as gamma density
+
+
+
+```{r Bayes_parameter_estimates_dgamma, fig.height = 6}
 
 # Use quadratic approximation posterior distribution (quap) 
-baye_gam <- quap(
+baye_gam_dgamma <- quap(
   alist(
     log_flow  ~ dnorm( mu , sigma ) ,
     mu       <- Xp %*% w ,
     w         ~ dnorm(0,1),
-    sigma     ~ dexp(1)
+    sigma     ~ dgamma(1)
+),
+data=list( log_flow = meas_data$log_flow , Xp = Xp ) ,
+start=list( w = rep( 0 , ncol(Xp) ) ) )
+
+
+# Parameter estimates from Bayesian estimation
+precis( baye_gam_dgamma, depth = 2, prob = 0.95, digits = 5)
+
+# Extract parameter estimates
+post_dgamma   <- extract.samples( baye_gam_dgamma, n = 1e4 )
+# head(post_dnorm)
+
+gammaPars <- fitdistr(post_dgamma$sigma,"gamma")
+shapeML   <- gammaPars$estimate["shape"]
+rateML    <- gammaPars$estimate["rate"]
+
+xval <- seq(0,max(post_dgamma$sigma),len=length(post_dgamma$sigma))
+
+data.frame(post_dgamma) %>% 
+  ggplot( aes(sigma ) ) +
+  geom_density( stat = 'density') +
+  stat_function(aes(x = xval, y = ..y..), fun = dgamma, colour="brown", 
+                n = length(post_dgamma$sigma), args = list(shape=shapeML, rate=rateML)) +
+  scale_x_continuous( limits = c(0.055, 0.070)) + 
+  labs( title = paste0('Figure 7. Distribution of Bayes dgamma parameter sigma with reference dgamma(shape = ',
+                       format(shapeML, digits = 4),', rate = ', format(rateML, digits = 4), ')')) +
+  theme_bw()
+
+
+```
+
+
+### Random Component to log stage values modelled as normal density
+
+
+```{r Bayes_parameter_estimates_dnorm, fig.height = 6}
+
+# Use quadratic approximation posterior distribution (quap) 
+baye_gam_dnorm <- quap(
+  alist(
+    log_flow  ~ dnorm( mu , sigma ) ,
+    mu       <- Xp %*% w ,
+    w         ~ dnorm(0,1),
+    sigma     ~ dnorm(1,1)
 ),
 data=list( log_flow = meas_data$log_flow , Xp = Xp ) ,
 start=list( w = rep( 0 , ncol(Xp) ) ) )
@@ -346,8 +395,38 @@ start=list( w = rep( 0 , ncol(Xp) ) ) )
 # Parameter estimates from Bayesian estimation
 precis( baye_gam, depth = 2, prob = 0.95, digits = 5)
 
+# Extract parameter estimates
+post_dnorm   <- extract.samples( baye_gam, n = 1e4 )
+head(post_dnorm)
+
+# dens( post$sigma, norm.comp=TRUE , main="Distribution of sigma estimates" , show.HPDI=TRUE)
+
+
+data.frame(post_dnorm) %>% 
+  ggplot( aes(sigma ) ) +
+  geom_density( stat = 'density') +
+  stat_function(fun = dnorm, 
+                args = list( mean = mean(post_dnorm$sigma), 
+                             sd   = sd(  post_dnorm$sigma)), color = 'red' ) +
+  scale_x_continuous( limits = c(0.055, 0.070)) + 
+  labs( title = paste0('Figure 6. Distribution of Bayes dnorm parameter sigma with reference dnorm(mean = ',
+                       format(mean(post_dnorm$sigma), digits = 4),', sd = ', 
+                       format(  sd(post_dnorm$sigma), digits = 4), ')')) +
+  theme_bw()
+
+
+```
+
+
+
+
+
+
+
+```{r }
+
 # Correlation among parameters
-ggcorrplot( cov2cor( vcov( baye_gam)), type = 'lower', 
+ggcorrplot( cov2cor( vcov( baye_gam_dnorm)), type = 'lower', 
                      insig = 'blank',  lab = TRUE, digits = 2)
 
 ```
@@ -370,13 +449,9 @@ coef_gam %>%
                    label.padding = 0.25,
                   segment.color = 'grey50') +
   theme_classic() +
-  labs( x = 'GAM Parameter Estimate',  y = 'Bayesian Parameter Estimate')
+  labs( x = 'GAM Parameter Estimate',  y = 'Bayesian Parameter Estimate',
+        title = 'Figure 4. Compare parameters estimated with and without random component in log stage values')
   
-# plot( coef(Gmodel), coef(baye_gam)[1:10], pch = 16, col = 'red')
-
-
-
-
 ```
 ```{r extract_bayes}
 # Extract parameter estimates
@@ -384,6 +459,34 @@ post   <- extract.samples( baye_gam, n = 1e4 )
 head(post, n = 5)
 
 dens( post$sigma, norm.comp=TRUE , main="Distribution of sigma estimates" , show.HPDI=TRUE)
+
+
+data.frame(post) %>% 
+  ggplot( aes(sigma ) ) +
+  geom_density( stat = 'density') +
+  stat_function(fun = dnorm, 
+                args = list( mean =  mean(post$sigma), sd = sd(post$sigma)), color = 'red' )
+
+```
+
+
+```{r }
+# Use quadratic approximation posterior distribution (quap) 
+baye_gam_dexp <- quap(
+  alist(
+    log_flow  ~ dnorm( mu , sigma ) ,
+    mu       <- Xp %*% w ,
+    w         ~ dnorm(0,1),
+    sigma     ~ dexp(1)
+),
+data=list( log_flow = meas_data$log_flow , Xp = Xp ) ,
+start=list( w = rep( 0 , ncol(Xp) ) ) )
+
+
+# Parameter estimates from Bayesian estimation
+precis( baye_gam, depth = 2, prob = 0.95, digits = 5)
+
+
 
 # Link uses the quap approximation, and samples from the posterior distribution, and computes 
 #   µ for each case in the data and sample from the posterior distribution.
