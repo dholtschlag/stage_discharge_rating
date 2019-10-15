@@ -86,29 +86,51 @@ meas_data  <- renameNWISColumns(meas_data)
 meas_data <- meas_data %>% 
   rename('stage_round'   = 'gage_height_va',
          'flow'          = 'discharge_va',
-         'Quality'       = 'measured_rating_diff',
-         'Control'       = 'control_type_cd')      %>% 
-  filter(Quality        != 'Unspecified' | Quality == !is.na(Quality)) %>%
-  mutate('Quality'       =  ordered(Quality, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
+         'qualifier'     = 'measured_rating_diff',
+         'control'       = 'control_type_cd')      %>% 
+  filter(qualifier      != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
+  mutate('qualifier'     =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
          'log_flow'      = log10(flow),
          # rnd refers to the approximation of stage to 0.01 ft.
          'log_stage_round' = log10(stage_round))
 
 # Populate field to combine similar Control attributes
-meas_data$Control_Degree <- meas_data$Control
-meas_data$Control_Degree  = case_when(str_detect(meas_data$Control, 'Heavy')      ~ 'Heavy',
-                                     str_detect(meas_data$Control, 'Moderate')    ~ 'Moderate',
-                                     str_detect(meas_data$Control, 'Light'   )    ~ 'Light',
-                                     str_detect(meas_data$Control, 'Clear'   )    ~ 'Clear',
-                                     str_detect(meas_data$Control, 'Ice'     )    ~ 'Ice',
-                                     str_detect(meas_data$Control, 'Unspecifed')  ~ 'Unspecifed')
+meas_data$control_degree <- meas_data$control
+meas_data$control_degree  = case_when(str_detect(meas_data$control, 'Heavy')       ~ 'Heavy',
+                                      str_detect(meas_data$control, 'Moderate')    ~ 'Moderate',
+                                      str_detect(meas_data$control, 'Light'   )    ~ 'Light',
+                                      str_detect(meas_data$control, 'Clear'   )    ~ 'Clear',
+                                      str_detect(meas_data$control, 'Ice'     )    ~ 'Ice',
+                                      str_detect(meas_data$control, 'Unspecifed')  ~ 'Unspecifed')
 
-meas_data$Control_Degree = ordered(meas_data$Control_Degree,
+meas_data$control_degree = ordered(meas_data$control_degree,
                                   levels = c('Unspecifed', 'Clear', 'Light', 'Moderate', 
                                              'Heavy', 'Ice'))
 
 # Only cases where flow and stage are measured
 meas_data <- meas_data[complete.cases(meas_data$stage, meas_data$flow),]
+
+# ---------------------------------
+# Code  Description
+# ---------------------------------
+# E     Excellent    The data is within 2% (percent) of the actual flow
+# G     Good         The data is within 5% (percent) of the actual flow
+# F     Fair         The data is within 8% (percent) of the actual flow
+# P     Poor         The data are >8% (percent) of the actual flow
+# https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code
+
+# qualifier <- .15; flow = 10000; stderr <- (log10(flow * (1 + qualifier)) - log10(flow))/2
+
+meas_data <- meas_data %>% 
+  mutate(qualifier_err = ifelse( qualifier == 'Excellent', 0.02,
+                                 ifelse( qualifier == 'Good', 0.05, 
+                                         ifelse( qualifier == 'Fair', 0.08,
+                                                 ifelse( qualifier == 'Poor', 0.15, NA)))),
+         meas_flow_stderr = (log10( flow * (1 + qualifier_err)) - log_flow ) / 2.)
+
+                                
+
+
 
 
 ```
@@ -297,7 +319,7 @@ meas_data %>%
 ### GAM for Stage-Flow Rating
 
 
-```{r gam_estimate_of_rating, fig.height = 7, fig.cap =  }
+```{r gam_estimate_of_rating, fig.height = 7 }
 
 # Compute GAM 
 Gmodel  <- gam(meas_data$log_flow ~ s(meas_data$log_stage_unique))
@@ -313,17 +335,17 @@ Xp      <- predict( Gmodel, type = 'lpmatrix')
 
  as.data.frame(Xp) %>%
   gather( key = 'basis', value = 'smo_stage' ) %>% 
-  mutate( basis_row = rep(1:776, 10)) %>% 
-   ggplot( aes( x = basis_row, y = smo_stage, color = basis)) +
+  mutate( basis_row = rep(1:776, 10),
+          log_stage_unique = rep(meas_data$log_stage_unique, 10)) %>% 
+   ggplot( aes( x = log_stage_unique, y = smo_stage, color = basis)) +
    geom_line() +
    theme_bw()  +
    theme( legend.position = 'bottom') +
-   xlab('Basis Row (Sorted by Increasing Stage)') +
+   xlab('Log10 of Measured Stage, in feet') +
    ylab('Basis Coefficient') + 
-   labs( title = 'Figure 7. Basis (matrix columns of Xp) for GAM Smoothing Spline' )
+   scale_x_continuous( limits = c(0.5, 1.1), breaks = seq(0.5, 1.1, by = 0.1)) + 
+   labs( title = 'Figure 7. Relation between log(stage) and GAM Smoothing Spline' )
   
-
- 
 
 ```
 
@@ -403,16 +425,18 @@ head(post_dnorm)
 
 
 data.frame(post_dnorm) %>% 
-  ggplot( aes(sigma ) ) +
-  geom_density( stat = 'density') +
+  ggplot( aes(sigma )) +
+  geom_density( stat = 'density', alpha = 0.25, color = 'blue', size = 1.5 ) +
   stat_function(fun = dnorm, 
                 args = list( mean = mean(post_dnorm$sigma), 
-                             sd   = sd(  post_dnorm$sigma)), color = 'red' ) +
-  scale_x_continuous( limits = c(0.055, 0.070)) + 
-  labs( title = paste0('Figure 6. Distribution of Bayes dnorm parameter sigma with reference dnorm(mean = ',
+                             sd   = sd(  post_dnorm$sigma)),   color = 'red',  size = 1.5, ) +
+  # scale_color_manual(name = "Density Plot", values = c("Empirical" = 'blue' ) ) +
+  scale_x_continuous( limits = c(0.0575, 0.070)) + 
+  labs( title = paste0('Figure 6. Distribution of sigma for  Bayes dnorm parameter sigma with reference dnorm(mean = ',
                        format(mean(post_dnorm$sigma), digits = 4),', sd = ', 
                        format(  sd(post_dnorm$sigma), digits = 4), ')')) +
   theme_bw()
+  
 
 
 ```
