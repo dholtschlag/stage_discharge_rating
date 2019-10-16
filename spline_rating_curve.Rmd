@@ -29,6 +29,8 @@ library(ggrepel)
 library(ggcorrplot)
 # Package expss contains the function vlookup
 library(expss)
+# Package to plot distribution
+library(ggfortify)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
@@ -109,7 +111,11 @@ meas_data$control_degree = ordered(meas_data$control_degree,
 
 # Only cases where flow and stage are measured
 meas_data <- meas_data[complete.cases(meas_data$stage, meas_data$flow),]
+```
 
+
+
+```{r flow_meas_error}
 # ---------------------------------
 # Code  Description
 # ---------------------------------
@@ -128,9 +134,10 @@ meas_data <- meas_data %>%
                                                  ifelse( qualifier == 'Poor', 0.15, NA)))),
          meas_flow_stderr = (log10( flow * (1 + qualifier_err)) - log_flow ) / 2.)
 
-                                
 
-
+meas_data %>% 
+  ggplot( aes( x = log_flow, y = meas_flow_stderr, color = qualifier)) +
+  geom_point()
 
 
 ```
@@ -441,7 +448,67 @@ data.frame(post_dnorm) %>%
 
 ```
 
+### Include qualifier info to account for varying uncertainty
 
+
+```{r Bayes_parameter_estimates_uncert_x, fig.height = 6}
+x0 = Xp[1:776,1]; x1 = Xp[1:776,2]; x2 = Xp[1:776,3]; x3 = Xp[1:776,4]; x4 = Xp[1:776, 5];
+x5 = Xp[1:776,6]; x6 = Xp[1:776,7]; x7 = Xp[1:776,8]; x8 = Xp[1:776,9]; x9 = Xp[1:776,10];
+
+
+# Use quadratic approximation posterior distribution (quap) 
+baye_gam_uncert_x <- map2stan(
+  alist(
+    lflow_est  ~ dnorm( lflow_rat , sigma ) ,
+    lflow_rat <- b0 * x0 + b1 * x1 + b3 * x3 + b4 * x4 + b5 * x5 + b6 * x6 + b7 * x7 + b7 * x7 + b8 * x8 + b9 * x9,
+    b0         ~ dnorm(0,1),
+    b1         ~ dnorm(0,1),
+    b2         ~ dnorm(0,1),
+    b3         ~ dnorm(0,1),
+    b4         ~ dnorm(0,1),
+    b5         ~ dnorm(0,1),
+    b6         ~ dnorm(0,1),
+    b7         ~ dnorm(0,1),
+    b8         ~ dnorm(0,1),
+    b9         ~ dnorm(0,1),
+    lflow_mea  ~ dnorm(lflow_est, lflow_sig),
+    sigma      ~ dchisq(2)
+),
+data=list( log_flow  = meas_data$log_flow, 
+           x0 = x0, x1 = x1, x2 = x2, x3 = x3, x4 = x4, x5 = x5, x6 = x6, x7 = x7, x8 = x8, x9 = x9, 
+           lflow_sig = meas_data$meas_flow_stderr) ,
+start=list(lflow_est = meas_data$log_flow ),
+iter = 2000, warmup = 1000, chains = 3, cores = 6,
+control=list(max_treedepth = 20, adapt_delta = 0.975))
+
+
+# Parameter estimates from Bayesian estimation
+precis( baye_gam_uncert_x, depth = 1, prob = 0.95, digits = 5)
+
+# Extract parameter estimates
+post_dnorm   <- extract.samples( baye_gam_uncert_x, n = 1e4 )
+# head(post_dnorm)
+
+# dens( post$sigma, norm.comp=TRUE , main="Distribution of sigma estimates" , show.HPDI=TRUE)
+
+
+data.frame(post_dnorm) %>% 
+  ggplot( aes(sigma )) +
+  geom_density( stat = 'density', alpha = 0.25, color = 'blue', size = 1.5 ) +
+  stat_function(fun = dnorm, 
+                args = list( mean = mean(post_dnorm$sigma), 
+                             sd   = sd(  post_dnorm$sigma)),   color = 'red',  size = 1.5, ) +
+  # scale_color_manual(name = "Density Plot", values = c("Empirical" = 'blue' ) ) +
+  # scale_x_continuous( limits = c(0.0575, 0.070)) + 
+  labs( title = paste0('Figure 6. Distribution of sigma for  Bayes dnorm parameter sigma with reference dnorm(mean = ',
+                       format(mean(post_dnorm$sigma), digits = 4),', sd = ', 
+                       format(  sd(post_dnorm$sigma), digits = 4), ')')) +
+  theme_bw()
+  
+
+ggdistribution(dgamma, x = seq(0, 2, 0.02), shape = 2, scale = 0.2)
+ggdistribution(dchisq, x = seq(0, 10, 0.02), df = 2.25)
+```
 
 
 
