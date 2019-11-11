@@ -1,0 +1,256 @@
+---
+title: "Stage-Discharge Ratings at 04122500 Pere Marquette Riveer at Scottville, MI"
+author: "Dave Holtschlag"
+date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggthemes)
+library(dataRetrieval)
+library(kableExtra)
+library(mgcv)
+library(extraDistr)
+library(gridExtra)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read Rating Period Dates
+
+```{r read_rat_man}
+
+rating_period <- read.csv('Data/04122500/rating_period_start_end.txt', header = TRUE,
+                          sep = '\t', stringsAsFactors = FALSE, 
+                          colClasses = c('character', 'Date', 'Date'))
+
+rating_period %>% 
+  kable( caption = 'Table 1. Start and end dates for selected rating curves'  ) %>% 
+  kable_styling()
+```
+
+## Read base rating curves for 04122300 Pere Marquette River at Scottville, MI
+
+```{r read_curves}
+
+rc_wide <- read.csv('Data/04122500/04122500_rating_16.0.txt', header = FALSE, sep = '\t',
+               stringsAsFactors = FALSE)
+colnames(rc_wide) <- c('flow_r16_0', 'Stage')
+
+rc_numbers <- c('17.0', '18.0', '19.0', '20.0', '20.1', '21.0')
+# Note the use of the escape characters for '.'
+rc_names   <- gsub('\\.','_', rc_numbers)
+
+for (i in 1:6){
+  tmp <- read.csv(paste0('Data/04122500/04122500_rating_',rc_numbers[i],'.txt'), 
+                header = FALSE, sep = '\t', stringsAsFactors = FALSE)
+  colnames(tmp) <- c(paste0('flow_r', rc_names[i]),'Stage')
+  rc_wide <- rc_wide %>% 
+     left_join( tmp)
+}
+
+# Move Stage to first column
+rc_wide <- rc_wide %>% 
+  select('Stage', everything())
+
+rc_long <- rc_wide %>% 
+  gather( key = 'rc_no', value = 'flow', -Stage )
+
+```
+
+
+## Plot selected base rating curves
+
+```{r plot_rc, fig.height = 7, fig.width = 8}
+
+rc_long %>% 
+  mutate( rating_curve = substr( rc_no, 7, 10 ) ) %>% 
+  ggplot( aes( y = Stage, x = flow, group = rating_curve, color = rating_curve)) +
+  geom_line( size = 1.25) +
+  theme_bw() +
+  theme( legend.position = 'bottom'  ) +
+  scale_x_continuous( trans = 'identity', limits = c(500, 3500), breaks = seq( 500, 3500, by = 500) ) +
+  scale_y_continuous( trans = 'identity', limits = c(  1,    6), breaks = seq(   2,    6, by =   1) ) +
+  labs( title = 'Figure 1. Selected base rating curves at 04122500 Pere Marquette Rive at Scottville, MI' ) +
+  ylab( 'Stage, in feet' ) +
+  xlab( 'Flow, in cubic feet per second')
+
+
+```
+
+
+## Retrieve flow measurements 
+
+```{r flow_meas}
+
+flow_meas <- readNWISmeas('04122500', expanded = TRUE, tz = "America/New_York" )
+# Add water year column
+flow_meas$water_year <- calcWaterYear( flow_meas$measurement_dt )
+
+# Compute number of flow measurements by water year
+flow_meas %>% 
+  group_by( water_year ) %>% 
+  summarise( n = n() ) %>% 
+  kable( caption = 'Table 2. Number of flow measurements per year by water year') %>% 
+  kable_styling()
+
+```
+
+## Plot time series of direct measurements
+
+
+```{r plot_measured_flows, fig.width = 9}
+
+flow_meas %>% 
+  mutate( quality_rating = factor( measured_rating_diff, levels = c("Excellent", "Good", "Fair", "Poor"))) %>% 
+  ggplot( aes( x = measurement_dt, y = discharge_va, group = quality_rating )) +
+  geom_point( aes( color = quality_rating ) ) +
+  scale_y_continuous( trans = 'log10' , breaks = c(300, 500, 1000, 2000, 3000, 5000, 7000), limits = c(300, 7000)) +
+  scale_x_date( breaks = seq.Date( from = as.Date('1985-01-01'), to = as.Date('2020-01-01'), by = '5 years'),
+                date_labels = '%Y') +
+  theme_bw() +
+  xlab( 'Date of measurement') +
+  ylab( 'Measured flow, in cubic feet per second') +
+  labs( title = 'Figure 1. Streamflow measurements at 04122500 Pere Marquette River at Marquette, MI since 1985') +
+  theme( legend.position = 'bottom' ) +
+  geom_vline( xintercept = rating_period$start_date, color = 'grey', linetype = 'dashed' )
+
+```
+
+
+## Compute GAM for 2020 rating 
+
+Results indicate that 100 percent of the deviance is explained.
+
+
+```{r gam_rc2020, fig.width = 9}
+
+rating_2020_10_08 <- read.csv('Data/04122500/rating_2020_10_08.txt', header = FALSE, sep = '\t',
+               stringsAsFactors = FALSE)
+colnames(rating_2020_10_08) <- c('flow_r2020', 'Stage')
+
+gam_rc_2020 <- gam( flow_r2020 ~ s( Stage ), data = rating_2020_10_08 )
+
+rating_2020_10_08$gam_pred_rc <- predict( gam_rc_2020 )
+
+print(summary( gam_rc_2020) )
+
+```
+
+## Plot direct measurements and rating curve 21
+
+
+```{r plot_rating_21, fig.width = 9}
+
+flow_meas %>% 
+  mutate( water_year     = factor( water_year )) %>% 
+  ggplot( aes( x = discharge_va, y = gage_height_va, group = water_year )) +
+  geom_point( aes( color = water_year ) ) +
+  scale_x_continuous( trans = 'log10' , breaks = c(300, 500, 1000, 2000, 3000, 5000, 8000)) +
+  geom_line(data = rating_2020_10_08, aes(y = Stage, x = gam_pred_rc, group = NULL), 
+            color = 'salmon', size = 3, alpha = 0.5) +
+  geom_line(data = rating_2020_10_08, aes(y = Stage, x = flow_r2020, group = NULL), 
+            color = 'blue',   size = 0.5) +
+  theme_bw() +
+  ylab( 'Stage, in feet') +
+  xlab( 'Measured flow, in cubic feet per second') +
+  labs( title = 'Figure 2. Streamflow measurements and 2020 rating at 04122500 Pere Marquette River at Marquette, MI since 1985') +
+  theme( legend.position = 'right' ) 
+
+```
+## Compute optimum sigma for half Cauchy distribution as measurement weight function
+
+
+```{r gam_weights, fig.width = 9}
+
+# These are the number of days prior to the current time in which measurements were made
+time_pnts          <- flow_meas$measurement_dt[nrow(flow_meas)] - flow_meas$measurement_dt
+
+
+# function to be mimimized to optimize GAM weights
+min_err <- function(x) {
+  dhc           <- dhcauchy( time_pnts, sigma = x )
+  flow_meas$dhc <- dhc/mean(dhc)
+  # Develop GAM on measured stage-discharge data
+  gam1      <- gam(discharge_va ~ s(gage_height_va), weights = dhc, data = flow_meas )
+  # Evaluate GAM on rating curve data
+  gam1_pred <- predict(gam1, newdata = data.frame( gage_height_va = rating_2020_10_08$Stage))
+  sum( (rating_2020_10_08$flow_r2020 - gam1_pred)^2 )
+}
+
+# Optimize the sigma parameter of the half Cauchy weight function
+opt_res <- optimize(min_err, c(100, 10000), tol = 0.0001)
+
+print(paste('The optimum sigma value is:', format(opt_res$minimum, digits = 5)))
+
+```
+
+## Plot time series of measurement weights and flows
+
+```{r plot_ts_wts_flows, fig.height = 9}
+
+# Add weights to flow_meas data
+dhc            <- dhcauchy(time_pnts, sigma = opt_res$minimum, log = FALSE )
+flow_meas$dhc  <- dhc/mean(dhc) 
+
+# Compute GAM with optimized weights
+gam1 <- gam( discharge_va ~ s(gage_height_va),weight = dhc,  data = flow_meas )
+
+print(summary(gam1))
+
+# Create 
+wt_plt <- flow_meas %>% 
+  mutate( quality_rating = factor( measured_rating_diff, levels = c("Excellent", "Good", "Fair", "Poor"))) %>%
+  arrange( dhc ) %>% 
+  ggplot( aes( x = measurement_dt, y = dhc)) +
+  geom_line( alpha = 1.0 ) +
+  scale_y_continuous( trans = 'identity' ) +
+  scale_x_date( breaks = seq.Date( from = as.Date('1985-01-01'), to = as.Date('2020-01-01'), by = '5 years'),
+                date_labels = '%Y') +
+  theme_bw() +
+  xlab( 'Date of measurement') +
+  ylab( 'Measurement weight') +
+  labs( title = 'Figure 3a. Time series of GAM Weights at 04122500 Pere Marquette River at Marquette, MI since 1985') 
+  geom_vline( xintercept = rating_period$start_date, color = 'grey', linetype = 'dashed' )
+
+ts_plt <- flow_meas %>% 
+  mutate( quality_rating = factor( measured_rating_diff, levels = c("Excellent", "Good", "Fair", "Poor"))) %>%
+  arrange( measurement_dt ) %>% 
+  ggplot( aes( x = measurement_dt, y = discharge_va, group = quality_rating )) +
+  geom_point( aes( color = quality_rating ) ) +
+  scale_y_continuous( trans = 'identity' ) +
+  scale_x_date( breaks = seq.Date( from = as.Date('1985-01-01'), to = as.Date('2020-01-01'), by = '5 years'),
+                date_labels = '%Y') +
+  theme_bw() +
+  xlab( 'Date of measurement') +
+  ylab( 'Measured flow, in cubic feet per second') +
+  labs( title = 'Figure 3b. Time series of flow measurements at 04122500 Pere Marquette River at Marquette, MI since 1985') +
+  theme( legend.position = 'bottom' ) 
+
+
+grid.arrange(arrangeGrob(wt_plt, ncol=1, nrow=1),
+         arrangeGrob(ts_plt, ncol=1, nrow=1), heights=c(3,8)) 
+```
+
+## Compare GAM model with current rating curve
+
+
+```{r compare_rc_gam, fig.width = 8}
+
+# Predict log_flow at each point on the rating curve
+gam1_pred <- predict(gam1, newdata = data.frame( gage_height_va = rating_2020_10_08$Stage))
+
+rating_2020_10_08$gam_pred_meas <- gam1_pred
+
+rating_2020_10_08 %>% 
+  gather( key = 'Estimator', value = 'Flow_Estimate', c('flow_r2020', 'gam_pred_rc', 'gam_pred_meas')) %>% 
+  ggplot( aes(x = Flow_Estimate, y = Stage, group = Estimator ) ) +
+  geom_line( aes( color = Estimator ) ) +
+  xlab('Flow, in cubic feet per second') +
+  ylab('Stage, in feet') +
+  theme_bw() +
+  theme( legend.position = 'bottom' )
+
+
+```
