@@ -64,17 +64,72 @@ print(head(gage_info))
 ```{r read_rating_data, fig.width = 9}
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
 #   provide detailed info on stage discharge
-rating17 <- read.csv('Data/04122500/04122500_rating_17.0.txt', header = FALSE, sep = '\t') 
-colnames( rating17 ) <- c('flow', 'stage')
+rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
+colnames( rating19 ) <- c('rated_flow_19', 'stage')
 
-rating17 %>% 
-  ggplot( aes( x = flow, y = stage )) +
-  geom_line( color = 'blue') +
-  xlab( 'Flow, in cubic feet per second') +
-  ylab( 'Stage, in feet') +
-  labs(title = paste('Figure 1. Stage-Flow relation 17.0 at', site_no, station_nm)) +
-  theme_bw() 
+rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
+colnames( rating20 ) <- c('rated_flow_20', 'stage')
 
+
+rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
+colnames( rating21 ) <- c('rated_flow_21', 'stage')
+
+ratings <- rating19 %>% 
+  left_join( rating20 ) %>% 
+  left_join( rating21)  %>% 
+  dplyr::select(stage, everything() )
+  
+rating_long <- ratings %>% 
+  gather( key = 'rating_no', value = 'rated_flow', rated_flow_19, rated_flow_20, rated_flow_21)
+
+rating_long %>% 
+  ggplot( aes( x = rated_flow, y = stage,  group = rating_no)) +
+  geom_line( aes( color = rating_no, linetype = rating_no ), size = 1.5, alpha = 0.50) +
+  theme_bw() +
+  theme( legend.position = 'bottom' ) +
+  xlab( 'Flow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) +
+  labs( title =  'Figure 1. Selected rating curves at 04122500 Pere Marquette River at Scottville, MI' )
+  
+```
+
+
+
+
+```{r gam_rating19, fig.width = 9}
+
+
+
+# Estimate generalized additive model of stage - discharge rating 19 
+gam1 <- gam( rated_flow_19 ~ s(stage), data = rating19 )
+
+# Print summary of gam1
+print(summary(gam1))
+
+
+gam1_pred          <- predict(gam1, se.fit = TRUE)
+
+rating19$gam_flow    <- gam1_pred$fit
+rating19$se_fit      <- gam1_pred$se.fit
+rating19$error_025   <- rating19$rated_flow_19 - (gam1_pred$fit + qnorm(0.025) * gam1_pred$se.fit)   
+rating19$error_975   <- rating19$rated_flow_19 - (gam1_pred$fit + qnorm(0.975) * gam1_pred$se.fit) 
+rating19$flow_error  <- gam1$residuals
+rating19$pct_error   <- gam1$residuals / gam1$fitted.values * 100
+
+rating19 %>% 
+  # dplyr::arrange( stage ) %>% 
+  ggplot(    aes( y = pct_error, x = stage  )) +
+  geom_point( color = 'red', size = 0.5) +
+  # geom_line( aes( y = error_025), color = 'salmon') +
+  # geom_line( aes( y = error_975), color = 'salmon') +
+  # geom_ribbon( aes( ymin = error_025, ymax = error_975), fill = 'blue', alpha = 0.25 ) +
+  scale_y_continuous( breaks = seq( from = -0.5, to = 2, by = 0.5)) +
+  ylab( 'Flow Error, in percent') +
+  xlab( 'Stage, in feet') +
+  theme_bw() +
+  geom_hline( yintercept = 0, color = 'blue', linetype = 'dashed') +
+  theme( legend.position = 'bottom') +
+  labs( title = paste('Figure 2. Errors in Flow for GAM of rating curve 19 at', site_no, station_nm))
 
 ```
 
@@ -121,7 +176,7 @@ meas_data <- meas_data[complete.cases(meas_data$stage, meas_data$flow),]
 
 ## 
 
-```{r meas_change_stage}
+```{r unit_daily_stage}
 
 stage_unit <- read.csv('Data/04122500/stage/Gage_height.ft@04122500.EntireRecorda.csv', header = TRUE, sep = ',',
                        stringsAsFactors = FALSE, comment = '#')
@@ -133,13 +188,97 @@ stage_unit$datetime <- as_datetime(stage_unit$Timestamp..UTC.05.00, tz = 'Americ
 stage_day <- stage_unit %>% 
   rename( stage = Value ) %>% 
   group_by(day = floor_date( datetime, 'day')) %>% 
-  summarize( day_mean  = mean( stage, na.rm = TRUE ),
+  summarize( stage_mean_day  = mean( stage, na.rm = TRUE ),
              n         = n()) %>% 
   ungroup() %>% 
   arrange( day ) %>% 
-  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ))
+  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
+          day_date  = as.Date( day ))
+
+# Measured flows and daily stages for the interval when rating 19 was active
+#  Note: Discrete measurement timing is approximated to days
+stage_flow_day_19 <- stage_day %>% 
+  left_join( meas_data[, c('measurement_dt', 'flow', 'qualifier', 'meas_type')], 
+             by = c( 'day_date'  = 'measurement_dt')) %>% 
+  filter( day >= as.Date('1994-10-25', format = '%Y-%m-%d') & day <= as.Date('2011-03-01', format = '%Y-%m-%d' ))
 
 ```
+
+
+## Inital state space model
+yt is flow
+Xt is the 10 x 1 state vector of GAM parameters
+Q  is the fixed 10X10 covariance matrix of paramaters
+R  is an estimated constant measurement variance
+Zt is the matrix of fixed measurement components (smooth spline terms)
+Yt is sequential daily values of log_stage_round 
+
+```{r marss_m1}
+
+# stage_flow_day_19
+
+Yt <- stage_flow_day_19$flow
+
+# Predict the intercept and slope components for the spline smooth 
+Zt <- predict( gam1, newdata = data.frame( stage = stage_flow_day_19$stage_mean_day),
+                                           type = 'lpmatrix')
+
+Xt <- as.matrix( as.numeric(coefficients(gam1)), 10, 1)
+
+# Vp is the estimated covariance matrix for the parameters. This is a Bayesian
+# posterior covariance matrix that results from adopting a particular Bayesian
+# model of the smoothing process. Paricularly useful for creating
+# credible/confidence intervals
+
+#   Under ML or REML smoothing parameter estimation it is possible to correct
+#   the covariance matrix Vp for smoothing parameter uncertainty. This is the
+#   corrected version
+
+Q  <- as.list(as.matrix( as.numeric(gam1$Vp), 10, 10))
+write.table(Q, file = 'Qmatrix.csv', row.names = F, col.names = F)
+
+# write out matrix Q
+
+
+# Allocate matrix with NAs to contain Xp components for measured log_stage values to days of measurement
+Xp_aug <- matrix(NA, nrow = length(seq(ndx_min:ndx_max)), ncol = ncol(Xp))
+# Replace NA indicators with measured log_stage values 
+Xp_aug[ndx_log_stage,] <- Xp
+
+# Identify measured flows during daily flow period in analysis
+
+# Find indices of measured flows in daily analysis range
+ndx_meas_flow <- which( meas_data$measurement_dt >= daily_data$measurement_dt[ndx_min] &
+                        meas_data$measurement_dt <= daily_data$measurement_dt[ndx_max])
+
+Yt <- rep(NA, length(seq(27:996)))
+Yt[ndx_log_stage] <- meas_data$log_flow[ndx_meas_flow] 
+
+R = matrix( list( "R_sigma2"), 1, 1)
+
+
+
+# State-Space Model Component Z
+Zt = t(Xp_aug)
+
+dim(Zt) <- c(1, ncol(Xp), length(Yt))
+x0 = matrix(GAM_coef_est, nrow = ncol(Xp), ncol = 1)
+
+model.dat = Yt
+model.gen = list(Z = Zt, x0 = x0, R = R )
+
+m1 <- MARSS(model.dat, model.gen)
+
+
+```
+
+
+```{r }
+
+
+
+```
+
 
 ```{r flow_meas_error}
 # ---------------------------------
