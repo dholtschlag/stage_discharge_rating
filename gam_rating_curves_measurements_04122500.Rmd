@@ -1,0 +1,85 @@
+---
+title: "Rating Curve GAM 04122500"
+author: "Dave Holtschlag"
+date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dataRetrieval)
+library(lubridate)
+library(tidyverse)
+library(ggthemes)
+library(splines)
+library(mgcv)
+library(fitdistrplus)
+library(stringr)
+library(kableExtra)
+library(ggrepel)
+library(ggcorrplot)
+# Package expss contains the function vlookup
+library(expss)
+# Package to plot distribution
+library(ggfortify)
+# Multivariate Autoregressive State Space Model
+library(MARSS)
+library(matrixcalc)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+## Retrieve flow measurements and rating periods
+
+```{r retrieve_flow_rating_info}
+
+
+if( !exists(meas_data)){
+  flow_meas <- readNWISmeas('04122500', expanded = TRUE, tz = "America/New_York" )
+  # Add water year column
+  flow_meas$water_year <- calcWaterYear( flow_meas$measurement_dt )
+  flow_meas <- flow_meas %>% 
+    dplyr::select(measurement_nu, measurement_dt, gage_height_va, discharge_va, measured_rating_diff, 
+                  control_type_cd, water_year ) %>% 
+    dplyr::rename(stage = gage_height_va, flow = discharge_va, quality = measured_rating_diff, 
+                  control = control_type_cd, wyear = water_year)
+}
+
+table(flow_meas$quality)
+
+table(flow_meas$control)
+
+table(flow_meas$wyear)
+
+
+rating_period <- read.csv('Data/04122500/rating_period_start_end.txt', header = TRUE,
+                          sep = '\t', stringsAsFactors = FALSE, 
+                          colClasses = c('character', 'Date', 'Date'))
+```
+
+
+## Develop GAM of rating curves using data for each period
+
+```{r GAM_rating_from_meas}
+
+for (i in 3:nrow(rating_period)) {
+  start_day <- rating_period$start_date[i]
+  end_day   <- rating_period$end_date[i]
+  
+  meas_data_period <- flow_meas %>% 
+    dplyr::filter( measurement_dt >= start_day & measurement_dt <= end_day)
+  
+  gam_out_default   <- gam( flow ~ s(stage), data = meas_data_period)
+  plot(density(gam_out_default$residuals))
+  
+  
+  gam_out_gamma_log  <- gam( flow ~ s(stage), data = meas_data_period, family=Gamma(link=log) )
+  plot(density(gam_out_gamma_log$residuals))
+  
+  summary(gam_out_gamma_log)
+  
+  gam_pred <- predict(gam_out, se.fit = TRUE) 
+}
+
+
+
+```
