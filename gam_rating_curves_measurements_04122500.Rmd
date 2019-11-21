@@ -33,7 +33,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r retrieve_flow_rating_info}
 
 
-if( !exists(meas_data)){
+if( !exists('meas_data', mode = 'variable')){
   flow_meas <- readNWISmeas('04122500', expanded = TRUE, tz = "America/New_York" )
   # Add water year column
   flow_meas$water_year <- calcWaterYear( flow_meas$measurement_dt )

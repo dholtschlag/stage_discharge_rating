@@ -28,6 +28,8 @@ library(stringr)
 library(kableExtra)
 library(ggrepel)
 library(ggcorrplot)
+# strcmp and other Matlab like functions
+library(pracma)
 # Package expss contains the function vlookup
 library(expss)
 # Package to plot distribution
@@ -103,7 +105,6 @@ rating_long %>%
 
 # Estimate generalized additive model of stage - discharge rating 19 
 gam_rate_19 <- gam( rated_flow_19 ~ s(stage), data = rating19 )
-gam_meas_19 <- gam( )
 
 # Print summary of gam_rate_19
 print(summary(gam_rate_19))
@@ -150,14 +151,32 @@ meas_data  <- renameNWISColumns(meas_data)
 
 meas_data <- meas_data %>% 
   rename('stage_round'   = 'gage_height_va',
-         'flow'          = 'discharge_va',
+         'flow_meas'     = 'discharge_va',
          'qualifier'     = 'measured_rating_diff',
          'control'       = 'control_type_cd')      %>% 
   filter(qualifier      != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
   mutate('qualifier'     =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
-         'log_flow'      = log10(flow),
+         'log_flow_meas' = log10(flow_meas),
          # rnd refers to the approximation of stage to 0.01 ft.
          'log_stage_round' = log10(stage_round))
+
+
+# ---------------------------------
+# Code  Description
+# ---------------------------------
+# E     Excellent    The data is within 2% (percent) of the actual flow {95 percent of the time}
+# G     Good         The data is within 5% (percent) of the actual flow
+# F     Fair         The data is within 8% (percent) of the actual flow
+# P     Poor         The data are >8% (percent) of the actual flow
+
+meas_data <- meas_data %>% 
+  mutate( se_pct = case_when( qualifier == 'Excellent' ~  1.0,
+                              qualifier == 'Good'      ~  2.5,
+                              qualifier == 'Fair'      ~  4.0,
+                              qualifier == 'Poor'      ~ 10.0),
+          se_flow = se_pct/100 * flow_meas ) 
+
+
 
 # Populate field to combine similar Control attributes
 meas_data$control_degree <- meas_data$control
@@ -197,12 +216,25 @@ stage_day <- stage_unit %>%
   mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
           day_date  = as.Date( day ))
 
+# joint stage_day with full daily value
+
+
 # Measured flows and daily stages for the interval when rating 19 was active
 #  Note: Discrete measurement timing is approximated to days
-stage_flow_day_19 <- stage_day %>% 
-  left_join( meas_data[, c('measurement_dt', 'flow', 'qualifier', 'meas_type')], 
-             by = c( 'day_date'  = 'measurement_dt')) %>% 
+
+df_stage_flow_day_19 <- data.frame(day = seq.Date(from = date('1994-10-25'), to = date('2011-03-01'), by = '1 day'))
+
+
+df_stage_flow_day_19 <-df_stage_flow_day_19 %>% 
+  left_join( meas_data[, c('measurement_dt', 'flow_meas', 'qualifier', 'meas_type', 'se_flow')], 
+             by = c( 'day'  = 'measurement_dt')) %>% 
+  left_join( stage_day[, c('day_date', 'stage_mean_day')], by = c( 'day' = 'day_date' )) %>% 
   filter( day >= as.Date('1994-10-25', format = '%Y-%m-%d') & day <= as.Date('2011-03-01', format = '%Y-%m-%d' ))
+
+# find indices of missing stage_mean_day values
+ndx_ina <- which( is.na(df_stage_flow_day_19$stage_mean_day ))
+df_stage_flow_day_19$stage_mean_day[ndx_ina] <- 2.110
+
 
 ```
 
@@ -215,13 +247,17 @@ R  is an estimated constant measurement variance
 Zt is the matrix of fixed measurement components 
 Yt is sequential daily values of log_stage_round 
 
+
+Note: A multiplicative form for the Q matrix can be specified as:
+Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
+
 ```{r marss_m1}
 
 # stage_flow_day_19 as 1 x T matrix
-Yt <- matrix(stage_flow_day_19$flow, nrow = 1)
+Yt <- matrix(df_stage_flow_day_19$flow_meas, nrow = 1)
 
 # Predict the intercept and slope components for the spline smooth 
-Zt <- t(predict( gam_rate_19, newdata = data.frame( stage = stage_flow_day_19$stage_mean_day),
+Zt <- t(predict( gam_rate_19, newdata = data.frame( stage = df_stage_flow_day_19$stage_mean_day),
                                            type = 'lpmatrix'))
 
 rownames(Zt) <- NULL
@@ -243,38 +279,160 @@ Qn  <- gam_rate_19$Vp
 # Qc is a character matrix formed from a numeric matrix
 #   Initialize Qc matrix
 Qc <- matrix(NA, 10, 10)
-# Convert Q matrix to list 
-for (i in 1:10){
-  for (j in 1:10) {
-    Qc[i,j] <- paste(format(Qn[i,j], digits = 8, trim = TRUE),' q',  sep = '' )
-    # print(Qc[i,j])
-  }
-}
-noquote(Qc[4,5])
-writeLines(Qc[4,5])
 
-zt <- array(Zt, dim = c(1, 10, 5967))
+Q = "diagonal and unequal"
+
+zt <- array(Zt, dim = c(1, 10, 5972))
 
 Z  <- zt
 
 
 A  <- 'zero'
 # R  <- matrix(list(0),1,1); diag(R) = "r"
-R  <- array(0, dim = c(1, 1, 5967))
+R  <- array(0, dim = c(1, 1, 5972))
 ndx_ian <- which(!is.na(Yt))
 # R[1,ndx_ian] <- paste0('"r ', as.character(Yt[ndx_ian]),'"', sep='')
-R[1,1, ndx_ian] <- 0.01 * Yt[ndx_ian]
+R[1,1, ndx_ian] <- (df_stage_flow_day_19$se_flow[ndx_ian])^2
 U  <- 'zero'
-Q  <-  Qn * 0.02
+# Q  <-  Qn * 0.02
+# Q <- matrix(list('qicpt' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot' ,0,0,0,0,0,0,0,0,0,0,
+#                  'qknot'), 10, 10)
+
+Q <- matrix(list('qicpt',     0,      0,      0,       0,       0,       0,       0,        0,       0,
+                      0, 'qknot',     0,      0,       0,       0,       0,       0,        0,       0,
+                      0,      0, 'qknot',     0,       0,       0,       0,       0,        0,       0,
+                      0,      0,      0, 'qknot',      0,       0,       0,       0,        0,       0,
+                      0,      0,      0,      0,  'qknot',      0,       0,       0,        0,       0,
+                      0,      0,      0,      0,       0,  'qknot',      0,       0,        0,       0,
+                      0,      0,      0,      0,       0,       0,  'qknot',      0,        0,       0,
+                      0,      0,      0,      0,       0,       0,       0,  'qknot',       0,       0,
+                      0,      0,      0,      0,       0,       0,       0,       0,   'qknot' ,     0,
+                      0,      0,      0,      0,       0,       0,       0,       0,        0,  'qknot'),
+            10, 10)
+
+# Q <- matrix(list('qicpt','qincv',     0,      0,       0,       0,       0,       0,        0,       0,
+#                  'qincv','qknot', 'qcvar',    0,       0,       0,       0,       0,        0,       0,
+#                       0, 'qcvar', 'qknot', 'qcvar',    0,       0,       0,       0,        0,       0,
+#                       0,      0,  'qcvar', 'qknot', 'qcvar',    0,       0,       0,        0,       0,
+#                       0,      0,      0,   'qcvar', 'qknot', 'qcvar',    0,       0,        0,       0,
+#                       0,      0,      0,      0,    'qcvar', 'qknot', 'qcvar',    0,        0,       0,
+#                       0,      0,      0,      0,       0,    'qcvar', 'qknot', 'qcvar',     0,       0,
+#                       0,      0,      0,      0,       0,       0,    'qcvar', 'qknot',  'qcvar',    0,
+#                       0,      0,      0,      0,       0,       0,       0,    'qcvar',  'qknot' ,'qcvar',
+#                       0,      0,      0,      0,       0,       0,       0,       0,     'qcvar', 'qknot'),
+#             10, 10)
+
+
+
+Q <- matrix(list('vvii', 'cvik', 'cvik', 'cvik', 'cvik', 'cvik', 'cvik', 'cvik',  'cvik', 'cvik',
+                 'cvik', 'vvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'vvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'vvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'vvkk', 'cvkk', 'cvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'vvkk', 'cvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'vvkk', 'cvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'vvkk',  'cvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk',  'vvkk', 'cvkk',
+                 'cvik', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk', 'cvkk',  'cvkk', 'vvkk'),
+            10, 10)
+
+inits = list(Q=matrix(c( 1300 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.10 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.10 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.10 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.10 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.10 ,  0.01 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.10 ,  0.01 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.10 ,   0.01 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.10 ,  0.01 ,
+                         0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.10 ),
+            10, 10))
+
+inits = list(Q = Qtry)
+par_list <-coef(kemfit_r, what ='par')
+
+Qtry <- array( c(1200, 0.1, 0.002, 0.002), dim = c(4,1), dimnames = list(c('vvii', 'vvkk', 'cvik', 'cvkk'), c(NULL)))
+
+par_list$Q <- Qtry
+
+inits <- par_list
+
+Q = 'unconstrained'
+
+for ( i in 1:10) {
+  if (!strcmp( unlist(Q[i,j]), unlist(Q[j,i]))){
+    print(paste(i,j))
+  }
+}
 
 X0 <- as.matrix( as.numeric(coefficients(gam_rate_19)), 10, 1)
 V0 <- Qn
 
 model.gen=list(Z=Z,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
 
-kemfit <- MARSS(Yt, model = model.gen)
+kemfit_r3 <- MARSS(Yt, model = model.gen, control = list(maxit = 2000 ))
 
 ```
+## Results from state-space modeling
+
+Success! abstol and log-log tests passed at 571 iterations.
+Alert: conv.test.slope.tol is 0.5.
+Test with smaller values (<0.1) to ensure convergence.
+
+MARSS fit is
+Estimation method: kem 
+Convergence test: conv.test.slope.tol = 0.5, abstol = 0.001
+Estimation converged in 571 iterations. 
+Log-likelihood: -583.9928 
+AIC: 1171.986   AICc: 1172.117   
+ 
+        Estimate
+Q.qicpt  172.694
+Q.qknot    0.105
+Initial states (x0) defined at t=0
+
+Standard errors have not been calculated. 
+Use MARSSparamCIs to compute CIs and bias estimates.
+
+## GAM for stage_flow_day_19 meaurements
+
+```{r eval_state_space, fig.width = 9}
+
+# Store results of MARSS modeling
+df_stage_flow_day_19$ytT    <- as.vector(kemfit_r2$ytT)
+df_stage_flow_day_19$ytT.se <- as.vector(kemfit_r2$ytT.se)
+
+# Retrieve daily flows for rating period 19
+
+daily_means <- readNWISdv( '04122500', parameterCd = '00060', startDate = '1994-10-25',
+                               endDate = '2011-03-01')
+
+daily_means <- renameNWISColumns( daily_means )
+
+
+df_stage_flow_day_19$flow_daily <- daily_means$Flow
+
+
+df_stage_flow_day_19 %>% 
+  ggplot( aes( x = day, y = flow_daily  )) +
+  geom_line( color = 'blue', alpha = 0.5 ) +
+  geom_line( aes( y = ytT ), color = 'red', alpha = 0.5 ) +
+  theme_bw()
+
+
+
+
+
+```
+
 
 
 
