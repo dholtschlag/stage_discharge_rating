@@ -39,10 +39,12 @@ library(MARSS)
 library(matrixcalc)
 # The broom package takes the messy output of built-in functions in R, such as lm, nls, or t.test, and turns them into tidy data frames.
 library(broom)
+library(gganimate)
+library(gifski)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Specify Streamgage for Data Retrieval
+## Retrieve Streamgaging Site Inforamtion 
 
 ```{r specify_gage}
 
@@ -58,9 +60,11 @@ gage_info  <- readNWISsite(site_no)
 gage_info  <- renameNWISColumns(gage_info)
 
 # 
-station_nm <- str_to_title( gage_info$station_nm )
+gage_info$station_nm <- str_to_title( gage_info$station_nm )
 
-print(head(gage_info))
+gage_info[1,c('site_no','station_nm','drain_area_va', 'dec_lat_va', 'dec_long_va', 'alt_va','alt_datum_cd')] %>% 
+  kable( caption = 'Table 1. Summary streamgage information' ) %>% 
+  kable_styling()
 
 ```
 
@@ -69,30 +73,35 @@ print(head(gage_info))
 Reads and plots rating curves 19, 20, and 21 for streamgage 04122500 Pere Marquette River at Scottville, MI and plots the curves
 
 ```{r read_rating_data, fig.width = 9}
+
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
 #   provide detailed info on stage discharge
 
-
+rating18.0 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
+colnames( rating18.0 ) <- c('rated_flow_18.0', 'stage')
 
 rating19.0 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
-colnames( rating19 ) <- c('rated_flow_19.0', 'stage')
+colnames( rating19.0 ) <- c('rated_flow_19.0', 'stage')
 
-rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
-colnames( rating20 ) <- c('rated_flow_20.0', 'stage')
+rating20.0 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
+colnames( rating20.0 ) <- c('rated_flow_20.0', 'stage')
 
 rating20.1 <- read.csv('Data/04122500/04122500_rating_20.1.txt', header = FALSE, sep = '\t') 
 colnames( rating20.1 ) <- c('rated_flow_20.1', 'stage')
 
-rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
-colnames( rating21 ) <- c('rated_flow_21', 'stage')
+rating21.0 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
+colnames( rating21.0 ) <- c('rated_flow_21.0', 'stage')
 
-ratings <- rating19 %>% 
-  left_join( rating20 ) %>% 
-  left_join( rating21 ) %>% 
+
+rating_wide<- rating19.0   %>% 
+  left_join(  rating20.0 ) %>% 
+  left_join(  rating20.1)  %>% 
+  left_join(  rating21.0 ) %>% 
   dplyr::select(stage, everything() )
   
-rating_long <- ratings %>% 
-  gather( key = 'rating_no', value = 'rated_flow', rated_flow_19, rated_flow_20, rated_flow_21)
+rating_long <- rating_wide%>% 
+  gather( key = 'rating_no', value = 'rated_flow', 
+          rated_flow_19.0, rated_flow_20.0, rated_flow_20.1, rated_flow_21.0)
 
 rating_long %>% 
   ggplot( aes( x = rated_flow, y = stage,  group = rating_no)) +
@@ -117,6 +126,11 @@ gam_rate_19 <- gam( rated_flow_19 ~ s(stage), data = rating19 )
 
 # Print summary of gam_rate_19
 print(summary(gam_rate_19))
+
+# glance, tidy, and augment from boom package provide alternative summaries of the model
+# glance(gam_rate_19)
+# tidy(gam_rate_19)
+# augment(gam_rate_19) %>% kable() %>% kable_styling()
 
 
 gam_rate_19_pred     <- predict(gam_rate_19, se.fit = TRUE)
@@ -158,16 +172,24 @@ meas_data   <- readNWISmeas(site_no, expanded = TRUE, convertType = TRUE)
 meas_data  <- renameNWISColumns(meas_data)
 
 
+control_type <- 
+  recode_factor( meas_data$control_type_cd, 
+                 'Clear'    = 'Clear',
+          'VegetationLight' = 'Light Vegetation',
+          'DebrisLight'     = 'Light Debris',   
+          'IceShore'        = 'Shore Ice',
+          'DebrisModerate'  = 'Moderate Debris',
+          'IceCover'        = 'Ice Cover', .ordered = TRUE ) 
+
+meas_data$control_type <- control_type
+
+
 meas_data <- meas_data %>% 
-  rename('stage_round'   = 'gage_height_va',
-         'flow_meas'     = 'discharge_va',
-         'qualifier'     = 'measured_rating_diff',
-         'control'       = 'control_type_cd')      %>% 
-  filter(qualifier      != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
-  mutate('qualifier'     =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
-         'log_flow_meas' = log10(flow_meas),
-         # rnd refers to the approximation of stage to 0.01 ft.
-         'log_stage_round' = log10(stage_round))
+  rename('stage'          = 'gage_height_va',
+         'flow_meas'      = 'discharge_va',
+         'qualifier'      = 'measured_rating_diff') %>% 
+  filter(qualifier       != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
+  mutate('qualifier'      =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')))
 
 
 # ---------------------------------
@@ -188,7 +210,7 @@ meas_data <- meas_data %>%
 
 
 # Populate field to combine similar Control attributes
-meas_data$control_degree <- meas_data$control
+
 meas_data$control_degree  = case_when(str_detect(meas_data$control, 'Heavy')       ~ 'Heavy',
                                       str_detect(meas_data$control, 'Moderate')    ~ 'Moderate',
                                       str_detect(meas_data$control, 'Light'   )    ~ 'Light',
@@ -197,11 +219,36 @@ meas_data$control_degree  = case_when(str_detect(meas_data$control, 'Heavy')    
                                       str_detect(meas_data$control, 'Unspecifed')  ~ 'Unspecifed')
 
 meas_data$control_degree = ordered(meas_data$control_degree,
-                                  levels = c('Unspecifed', 'Clear', 'Light', 'Moderate', 
-                                             'Heavy', 'Ice'))
+                                  levels = c('Clear', 'Light','Moderate', 'Heavy', 
+                                             'Ice_Affected','Unspecifed'))
+
+
 
 # Only cases where flow and stage are measured
 meas_data <- meas_data[complete.cases(meas_data$stage, meas_data$flow),]
+
+
+table( meas_data$control_type, meas_data$qualifier ) %>%
+  kable( digits = 4, 
+         caption = 'Table 1. Frequency of flow measurement qualifiers and controls at 04122500 Pere Marquette River at Scottville, MI.') %>%
+  kable_styling() %>% 
+  add_header_above(c("Degree of Control", "Qualifier", 'Qualifier', "Qualifier", "Qualifier"))
+
+
+df <- data.frame( 'days_between_measurements' = diff(meas_data$measurement_dt))
+
+df %>% 
+  ggplot( aes( x = days_between_measurements )) + 
+  geom_density( fill = 'blue', alpha = 0.25 ) +
+  theme_bw() +
+  geom_vline( xintercept = 42.75, color = 'black', linetype = 'dashed' ) +
+  xlab( 'Time between flow measurements, in days' ) +
+  ylab( 'Probability Density') +
+  labs( title = 'Figure 2. Distribution of times between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from 1985 to 2019' )
+  
+  
+
+
 ```
 
 ## Read unit stage values for 04122500 Pere Marquette River at Scottville, MI
@@ -365,46 +412,42 @@ inits = list(Q=matrix(c( 1300 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 , 
                          0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,  0.01 ,   0.01 ,  0.10 ),
             10, 10))
 
-inits = list(Q = Qtry)
-par_list <-coef(kemfit_r, what ='par')
 
-Qtry <- array( c(1200, 0.1, 0.002, 0.002), dim = c(4,1), dimnames = list(c('vvii', 'vvkk', 'cvik', 'cvkk'), c(NULL)))
-
-par_list$Q <- Qtry
-
-inits <- par_list
-
-Q = 'unconstrained'
-
-for ( i in 1:10) {
-  if (!strcmp( unlist(Q[i,j]), unlist(Q[j,i]))){
-    print(paste(i,j))
-  }
-}
 
 X0 <- as.matrix( as.numeric(coefficients(gam_rate_19)), 10, 1)
 V0 <- Qn
 
 model.gen=list(Z=Z,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+```
 
-kemfit_por <- MARSS(Yt, model = model.gen, control = list(maxit = 2000 ))
+
+
+```{r estimate_marss, eval = FALSE}
+
+# Save command for the state space model
+# saveRDS(kemfit_por, file = 'Models/kemfit_por.rds')
+saveRDS(kemfit_por_Qdiag_unequal, file = 'Models/kemfit_por_Qdiag_unequal.rds')
+
+
+
+# Check if kemfit model exists and read, else recompute
+if( file.exists('Models/kemfit_por.rds')){
+  kemfit_por <- readRDS('Models/kemfit_por.rds')
+} else {
+  kemfit_por_Qdiag_unequal <- MARSS(Yt, model = model.gen, control = list(maxit = 5000 ))
+}
+
+# Computes states (xtT, xtt, xtt1, variances (VtT, Vtt, vtt1), and similar stats on kemfit object)
+kemfit_por_kfss <- MARSSkfss(kemfit_por)
 
 # Error: Stopped in MARSSboot() due to problem(s) with function arguments.
-#  Error in dpari[time.varying] <- dparmat(MLEobj, time.varying, t = t) :  replacement has length zero
-# paramCIs_hessian    <- MARSSparamCIs(kemfit_por, method = 'hessian')
+#   paramCIs_innovation = MARSSparamCIs(kemfit_por, method = 'innovations')
 
-# Errors displayed in console, but could not interrupt without shutting down. 
-# paramCIs_parametric <- MARSSparamCIs(kemfit_por, method = 'parametric')
-
-# Error: Stopped in MARSSboot() due to problem(s) with function arguments.
-paramCIs_innovation = MARSSparamCIs(kemfit_por, method = 'innovations')
-
-MARSSaic(kemfit_por)
 
 # Innovations bootstrapping uses the innovations resampling and can only be done if there are no missing values in the data.
-tmp <- MARSSboot( kemfit_por, nboot = 1000, output = 'parameters', sim = 'innovations', param.gen = 'MLE' )
+#   MARSSboot( kemfit_por, nboot = 1000, output = 'parameters', sim = 'innovations', param.gen = 'MLE' )
 
-kemfit_por_kfss <- MARSSkfss(kemfit_por)
+
 
 ```
 ## Results from state-space modeling
@@ -448,9 +491,24 @@ stage_knots_19 <- predict( gam_rate_19, type = 'lpmatrix')
 stage_knots_19 <- cbind(rating19$stage, stage_knots_19) 
 colnames(stage_knots_19)[1] <- 'stage'
 
+tmp <- meas_data %>% 
+  left_join( df_stage_flow_day_19, by = c('measurement_dt' = 'day') )
 
+ndx_kfss <- which( df_stage_flow_day_19$day %in% meas_data$measurement_dt )
+flow_xtT <- matrix(NA, nrow = 731, ncol = length(ndx_kfss) )
+
+for (i in 1:length(ndx_kfss)){
+  flow_xtT[ , i ] <- stage_knots_19_matrix %*% matrix(kemfit_por_kfss$xtT[ 1:10, ndx_kfss[ i ]], 10, 1)
+}
+
+sd_stage <- apply(flow_xtT, 1, FUN = identity, na.rm = TRUE)
+
+plot(sd_stage)
 
 stage_knots_19_matrix <- as.matrix(stage_knots_19[,2:11])
+
+
+plot(sd_stage, rating19.0$stage)
 
 state_coefs_19.0  <- matrix(kemfit_por_kfss$xtT[ 1:10,    1], 10, 1)
 state_coefs_20.0  <- matrix(kemfit_por_kfss$xtT[ 1:10, 5972], 10, 1)
@@ -524,6 +582,8 @@ rating19[, c('stage', 'rated_flow_19', 'flow_kfgam19.0', 'flow_kfgam20.0', 'flow
 Zt_rate19 <- t(predict( gam_rate_19, type = 'lpmatrix'))
          q_gam_rate19 <- kemfit$states[,    1] %*% Zt_rate19
 rating19$q_gam_rate19 <- as.vector(q_gam_rate19)
+
+
 
 
 
@@ -1433,4 +1493,58 @@ precis( m_bs_reg_01, depth = 2, prob = 0.95, digits = 5)
 ```
 
 
-}
+
+```{r annimate_rating}
+
+library(gganimate)
+#> Loading required package: ggplot2
+
+# We'll start with a static plot
+p <- ggplot(iris, aes(x = Petal.Width, y = Petal.Length)) + 
+  geom_line() +
+  transition_states(Species,
+                    transition_length = 2,
+                    state_length = 1)
+
+p
+
+
+animate(p, renderer = file_renderer('~/animation/'))[1:6]
+animate(p, 'output.gif')
+
+p <- rating_long %>% 
+  ggplot( aes(x = rated_flow, y = stage, color =  rating_no )) +
+  geom_point() +
+  transition_states(rating_no,
+                    transition_length = 1,
+                    state_length = 1) +
+  theme_bw() +
+  theme( legend.position = 'right') +
+  xlab( 'Streamflow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) + 
+  labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
+  geom_line( data = rating18.0, aes( x = rated_flow_18.0, y = stage), color = 'black', linetype = 'dots' )
+
+animate(p, nframes = 6, fps = 2)
+
+
+
+tmp <- as.data.frame(  as.table( flow_xtT ))
+colnames(tmp) <- c('Date', 'stage', 'flow')
+tmp$stage <- rating19.0$stage
+tmp$Date  <- rep( df_stage_flow_day_19$day[ndx_kfss] , each = 731)
+
+rating_days_measured <- tmp %>% 
+  ggplot( aes(x = flow, y = stage )) +
+  geom_point( color = 'blue', size = 0.5 ) +
+    transition_time(Date) +
+  labs(title = 'Date of Measurement: {frame_time}' ) + 
+  theme_bw() +
+  theme( legend.position = 'right') +
+  xlab( 'Streamflow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) + 
+  # labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
+  geom_line( data = rating18.0, aes( x = rated_flow_18.0, y = stage), color = 'black', linetype = 'dots' )
+
+animate(rating_days_measured, nframes = 155, fps = 10)
+```
