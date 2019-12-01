@@ -1,0 +1,822 @@
+---
+title: "Bayesian Estimation of a Generalized Additive Model to Describe the Stage-Discharge Relation"
+author: "Dave Holtschlag"
+date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+bibliography: bibliography.bib
+---
+
+## Abstract 
+A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
+
+### Setup computational environment
+
+```{r setup, include=FALSE}
+library( "rethinking" )
+options(mc.cores = parallel::detectCores())
+library(dataRetrieval)
+library(lubridate)
+library(tidyverse)
+library(ggthemes)
+library(splines)
+library(mgcv)
+library(fitdistrplus)
+library(stringr)
+library(kableExtra)
+library(ggrepel)
+library(ggcorrplot)
+# strcmp and other Matlab like functions
+library(pracma)
+# Package expss contains the function vlookup
+library(expss)
+# Package to plot distribution
+library(ggfortify)
+# Multivariate Autoregressive State Space Model
+library(MARSS)
+library(matrixcalc)
+# The broom package takes the messy output of built-in functions in R, such as lm, nls, or t.test, and turns them into tidy data frames.
+library(broom)
+library(gganimate)
+library(gifski)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Retrieve Streamgaging Site Inforamtion 
+
+```{r specify_gage}
+
+# initialize counter for figures
+fig_no <- 1
+
+# Retrieve gage info for specified site Number
+site_no    <- '04122500'
+
+gage_info  <- readNWISsite(site_no)
+
+# Standardize field names
+gage_info  <- renameNWISColumns(gage_info)
+
+# 
+gage_info$station_nm <- str_to_title( gage_info$station_nm )
+
+gage_info[1,c('site_no','station_nm','drain_area_va', 'dec_lat_va', 'dec_long_va', 'alt_va','alt_datum_cd')] %>% 
+  kable( caption = 'Table 1. Summary streamgage information' ) %>% 
+  kable_styling()
+
+# The starting and ending dates of the model
+#   Based on the beginning of unit stage date and endin on the first flow measurement of water year 2020
+date_beg_model  <- as.Date( '1994-10-25', format = '%Y-%m-%d' ) 
+date_end_model  <- as.Date( '2019-10-08', format = '%Y-%m-%d' )
+
+```
+### Get rating period info and display
+
+```{r }
+rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE)
+
+rating_history %>% 
+  kable( caption = 'Table 1. Streamflow Rating Curve History at 04122500 Pere Marquette River at Scottvill, MI') %>% kable_styling( full_width = FALSE )
+
+
+```
+
+
+### Retrieve Stage-Flow Rating
+
+Reads and plots rating curves 19, 20, and 21 for streamgage 04122500 Pere Marquette River at Scottville, MI and plots the curves
+
+```{r read_rating_data, fig.width = 9}
+
+# Rating curve at the selected site.  The 'exsa' parameter is an extended table
+#   provide detailed info on stage discharge
+
+rating18 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
+colnames( rating18 ) <- c('rated_flow_18', 'stage')
+
+rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
+colnames( rating19 ) <- c('rated_flow_19', 'stage')
+
+rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
+colnames( rating20 ) <- c('rated_flow_20', 'stage')
+
+rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
+colnames( rating21 ) <- c('rated_flow_21', 'stage')
+
+
+rating_wide <- rating18   %>%  
+  left_join(   rating19 ) %>% 
+  left_join(   rating20 ) %>% 
+  left_join(   rating21 ) %>% 
+  dplyr::select(stage, everything() )
+  
+rating_long <- rating_wide %>% 
+  gather( key = 'rating_no', value = 'rated_flow', rated_flow_18, 
+          rated_flow_19, rated_flow_20, rated_flow_20, rated_flow_21)
+
+rating_long %>% 
+  ggplot( aes( x = rated_flow, y = stage,  group = rating_no)) +
+  geom_line( aes( color = rating_no ), size = 1.0, alpha = 0.50) +
+  theme_bw() +
+  theme( legend.position = 'bottom' ) +
+  xlab( 'Flow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) +
+  annotate('text', x = c(1300, 1950, 3200, 5200), y = c( 4.0, 4.7, 6.0, 7.0), 
+           label = c('18', '19', '20', '21')) +
+  labs( title =  'Figure 1. Selected rating curves at 04122500 Pere Marquette River at Scottville, MI' )
+  
+```
+
+
+## Develop a generatized additive model (GAM) for rating 19
+
+```{r gam_rating19, fig.width = 9}
+
+
+
+# Estimate generalized additive model of stage - discharge rating 19 
+gam_rate_19 <- gam( rated_flow_19 ~ s(stage), data = rating19 )
+
+# Print summary of gam_rate_19
+print(summary(gam_rate_19))
+
+# Generalized Additive Model prediction for rating curve 18
+gam_rate_19_pred     <- predict(gam_rate_19, se.fit = TRUE)
+
+rating19$gam_flow    <- gam_rate_19_pred$fit
+rating19$se_fit      <- gam_rate_19_pred$se.fit
+rating19$error_025   <- rating19$rated_flow_19 - (gam_rate_19_pred$fit + qnorm(0.025) * gam_rate_19_pred$se.fit)   
+rating19$error_975   <- rating19$rated_flow_19 - (gam_rate_19_pred$fit + qnorm(0.975) * gam_rate_19_pred$se.fit) 
+rating19$flow_error  <- gam_rate_19$residuals
+rating19$pct_error   <- gam_rate_19$residuals / gam_rate_19$fitted.values * 100
+
+rating19 %>% 
+  # dplyr::arrange( stage ) %>% 
+  ggplot(    aes( y = pct_error, x = stage  )) +
+  geom_point( color = 'red', size = 0.5) +
+  # geom_line( aes( y = error_025), color = 'salmon') +
+  # geom_line( aes( y = error_975), color = 'salmon') +
+  # geom_ribbon( aes( ymin = error_025, ymax = error_975), fill = 'blue', alpha = 0.25 ) +
+  scale_y_continuous( breaks = seq( from = -0.5, to = 2, by = 0.5)) +
+  ylab( 'Flow Error, in percent') +
+  xlab( 'Stage, in feet') +
+  theme_bw() +
+  geom_hline( yintercept = 0, color = 'blue', linetype = 'dashed') +
+  theme( legend.position = 'bottom') +
+  labs( title = paste('Figure 2. Errors in Flow for GAM of rating curve 19 at', gage_info$site_no, 
+                      gage_info$station_nm))
+
+```
+
+
+
+
+### Retrieve Stage-Flow Measurement Pairs
+
+```{r read_meas_stage_flow}
+
+meas_data   <- readNWISmeas(site_no, expanded = TRUE, convertType = TRUE)
+
+# Standardize field names
+meas_data  <- renameNWISColumns(meas_data)
+
+
+control_type <- 
+  recode_factor( meas_data$control_type_cd, 
+                 'Clear'    = 'Clear Channel',
+          'VegetationLight' = 'Light Vegetation',
+          'DebrisLight'     = 'Light Debris',   
+          'IceShore'        = 'Shore Ice',
+          'DebrisModerate'  = 'Moderate Debris',
+          'IceCover'        = 'Ice Cover', .ordered = TRUE ) 
+
+meas_data$control_type <- control_type
+
+
+meas_data <- meas_data %>% 
+  rename('stage'          = 'gage_height_va',
+         'flow_meas'      = 'discharge_va',
+         'qualifier'      = 'measured_rating_diff') %>% 
+  filter(qualifier       != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
+  mutate('qualifier'      =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')))
+
+# Source 
+# https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code
+# ---------------------------------
+# Code  Description
+# ---------------------------------
+# E     Excellent    The data is within 2% (percent) of the actual flow {95 percent of the time}
+# G     Good         The data is within 5% (percent) of the actual flow
+# F     Fair         The data is within 8% (percent) of the actual flow
+# P     Poor         The data are >8% (percent) of the actual flow
+
+meas_data <- meas_data %>% 
+  mutate( se_pct = case_when( qualifier == 'Excellent' ~  1.0,
+                              qualifier == 'Good'      ~  2.5,
+                              qualifier == 'Fair'      ~  4.0,
+                              qualifier == 'Poor'      ~ 10.0),
+          se_flow = se_pct/100 * flow_meas ) %>% 
+  filter( measurement_dt >= date_beg_model & measurement_dt <= date_end_model )
+
+# Only cases where flow and stage are measured
+meas_data <- meas_data[complete.cases(meas_data$stage, meas_data$flow),]
+
+
+table( meas_data$control_type, meas_data$qualifier ) %>%
+  kable( digits = 4, 
+         caption = 'Table 1. Frequency of flow measurements by control type and measurement qualifiers at 04122500 Pere Marquette River at Scottville, MI, from 1985 to 2019.') %>%
+  kable_styling() %>% 
+  add_header_above(c("Type of Control", "Qualifier", 'Qualifier', "Qualifier", "Qualifier"))
+
+# Remove ice cover measurements
+meas_data <- meas_data %>% 
+  dplyr::filter( control_type != 'Ice Cover' ) %>% 
+  dplyr::select( 'measurement_nu', 'measurement_dt', 'measurement_tm', 'tz_cd_reported',
+                 'stage', 'flow_meas', 'qualifier',  'control_type',
+                 'se_pct', 'se_flow' )
+
+
+# Compute time between consequtive flow measurements
+df <- data.frame( 'days_between_measurements' = diff(meas_data$measurement_dt))
+
+
+# Plot the probability density of days between measurements
+df %>% 
+  ggplot( aes( x = days_between_measurements )) + 
+  geom_density( fill = 'blue', alpha = 0.25 ) +
+  theme_bw() +
+  geom_vline( xintercept = 46, color = 'black', linetype = 'dashed' ) +
+  xlab( 'Time between flow measurements, in days' ) +
+  ylab( 'Probability Density') +
+  labs( title = paste('Figure 2. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model) ) +
+  annotate('text', x = 40, y = 0.0265, label = '46')
+  
+  
+
+
+```
+
+## Read unit stage values for 04122500 Pere Marquette River at Scottville, MI
+
+```{r unit_daily_stage}
+
+stage_unit <- read.csv('Data/04122500/stage/Gage_height.ft@04122500.EntireRecorda.csv', header = TRUE, sep = ',',
+                       stringsAsFactors = FALSE, comment = '#')
+
+# Convert from character field to datetime referenced to EST
+stage_unit$datetime <- as_datetime(stage_unit$Timestamp..UTC.05.00, tz = 'America/New_York')
+
+# Summarize unit stage to daily mean stage
+stage_day <- stage_unit %>% 
+  rename( stage = Value ) %>% 
+  group_by(day = floor_date( datetime, 'day')) %>% 
+  summarize( stage_mean_day  = mean( stage, na.rm = TRUE ),
+             n         = n()) %>% 
+  ungroup() %>% 
+  arrange( day ) %>% 
+  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
+          day_date  = as.Date( day )) 
+
+
+# Measured flows and daily stages for the interval when rating 19 was active
+#  Note: Discrete measurement timing is approximated to days
+
+df_stage_flow_allDays <- data.frame(day = seq.Date(from = date_beg_model, to = date_end_model, by = '1 day'))
+
+# calculate_mode function from https://exploratory.io/note/kanaugust/1701090969905358
+#   Used in subsequent summarize
+calculate_mode <- function(x) {
+  uniqx <- unique(na.omit(x))
+  uniqx[which.max(tabulate(match(x, uniqx)))]
+}
+
+# Take the mean flow and stage for days of multiple flow measurement
+df_meas_data <- meas_data %>% 
+  group_by( measurement_dt ) %>% 
+  summarize( flow_meas    = mean( flow_meas) ,
+             stage        = mean( stage    ) ,
+             n            = n(),
+             qualifier    = calculate_mode(qualifier),
+             control_type = calculate_mode(control_type),
+             se_pct       = mean(se_pct),
+             se_flow      = mean(se_flow))
+
+# Integrate daily flow and discrete measurements 
+df_stage_flow_allDays <-df_stage_flow_allDays %>% 
+  left_join( df_meas_data[, c('measurement_dt', 'flow_meas', 'qualifier', 'control_type', 'se_flow')], 
+             by = c( 'day'  = 'measurement_dt')) %>% 
+  left_join( stage_day[, c('day_date', 'stage_mean_day')], by = c( 'day' = 'day_date' )) %>% 
+  filter( day >= date_beg_model & day <= date_end_model )
+
+```
+
+### Estimate missing stage based on daily mean flow and rating curve 19
+
+```{r missing_stage}
+
+
+
+# find indices of missing stage_mean_day values
+ndx_ina <- which( is.na(df_stage_flow_allDays$stage_mean_day ))
+
+# Find dates for missing data
+dates_missing <- df_stage_flow_allDays$day[ndx_ina]
+
+# Retrieve daily flows for span of missing data interval
+flow_dv_seq   <- readNWISdv( '04122500', parameterCd = '00060', startDate = min(dates_missing),
+                               endDate = max(dates_missing))
+
+# Find indices during the flow seqence that represent missing data
+ndx_miss      <- which( flow_dv_seq$Date %in% dates_missing )
+
+# Estimate daily mean stage from published daily mean flow
+stage_missing <- approx( x = rating19$rated_flow_19, y = rating19$stage, 
+                         xout = flow_dv_seq$X_00060_00003[ndx_miss])
+
+
+df_stage_flow_allDays$stage_mean_day[ ndx_ina ] <- stage_missing$y
+
+```
+
+
+## Inital state space model
+Yt is measured flow referenced to the day of measurement during the period when rating 19 was active. Most values are NA
+Xt is the 10 x 1 state vector of GAM parameters used to approximate rating 19
+Q  is the fixed 10X10 covariance matrix of paramaters
+R  is an estimated constant measurement variance
+Zt is the matrix of fixed measurement components 
+Yt is sequential daily values of log_stage_round 
+
+
+Note: A multiplicative form for the Q matrix can be specified as:
+This is provided just as a reminder of the format for defining Q with a multiplicative constant.
+Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
+
+```{r marss_m1}
+
+# Yt is the measurement vector that contains directly measured flows (not daily means)
+# stage_flow_day_19 as 1 x T matrix
+Yt <- matrix(df_stage_flow_allDays$flow_meas, nrow = 1)
+
+# Indexes for measured flows in vector
+ndx_ian_Yt <- which( !is.na(Yt) )
+
+print(paste('The measurement vector is', 
+            format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 ),'percent NA values.'))
+
+
+# Zt is the time-varying design matrix in the measurement equation
+#   Zt contains the intercept and knot components for the spline from the GA model 
+Zt <- t(predict( gam_rate_19, newdata = data.frame( stage = df_stage_flow_allDays$stage_mean_day),
+                                           type = 'lpmatrix'))
+# Remove row names
+rownames(Zt) <- NULL
+
+# Populate the Zt array in the format that MARSS expects
+Zt <- array(Zt, dim = c(1, 10, nrow(df_stage_flow_allDays)))
+
+# A is an unused time-varying vector in the measurement equation
+A  <- 'zero'
+
+
+R  <- array(1e+06, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+# Measurement variance specification
+#   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_flow[ndx_ian_Yt])^2
+
+
+df <- data.frame( measurement_variance <- R[1, 1, ndx_ian_Yt])
+
+
+df %>% 
+  ggplot( aes( x = measurement_variance)) +
+  geom_density( fill = 'green', alpha = 0.25 ) + 
+  scale_x_log10() +
+  geom_vline( xintercept = 300)
+
+# Initialize the measurement error vector
+R  <- array(3000, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+
+
+
+# Drift vector
+U  <- 'zero'
+# Initial state vector from GA model
+X0 <- as.matrix( as.numeric(coefficients(gam_rate_19)), 10, 1)
+# Initial covariance of the state model
+V0 <- gam_rate_19$Vp
+# 
+```
+
+## Q matrix representing the error variance of the state vector specification options
+
+```{r qmatrix}
+
+# Alternate specification for the state covariance matrix Q
+#   Diagonal matrix with unique specifications for the variance of two diagonal elements 
+Q <- matrix(list('vvii',     0,      0,      0,       0,       0,       0,       0,        0,       0,
+                     0,  'vvkk',     0,      0,       0,       0,       0,       0,        0,       0,
+                     0,      0,  'vvkk',     0,       0,       0,       0,       0,        0,       0,
+                     0,      0,      0,  'vvkk',      0,       0,       0,       0,        0,       0,
+                     0,      0,      0,      0,   'vvkk',      0,       0,       0,        0,       0,
+                     0,      0,      0,      0,       0,   'vvkk',      0,       0,        0,       0,
+                     0,      0,      0,      0,       0,       0,   'vvkk',      0,        0,       0,
+                     0,      0,      0,      0,       0,       0,       0,   'vvkk',       0,       0,
+                     0,      0,      0,      0,       0,       0,       0,       0,    'vvkk' ,     0,
+                     0,      0,      0,      0,       0,       0,       0,       0,        0,   'vvkk'),
+            10, 10)
+
+# Alternative specification for the state covariance matrix Q
+Q = 'diagonal and equal'
+Q = 'unconstrained'
+Q = 'equalvarcov'
+
+
+Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
+
+Qgam_diag <- matrix(list('0.01193951*q',   0,   0,   0,   0,   0,   0,   0,   0,   0,
+                    0 , '1.2730521*q',   0,   0,   0,   0,   0,   0,   0,   0,
+                    0 ,   0, '10.550829*q',   0,   0,   0,   0,   0,   0,   0,
+                    0 ,   0,   0, '0.7581285*q',   0,   0,   0,   0,   0,   0,
+                    0 ,   0,   0,   0, '5.7352363*q',   0,   0,   0,   0,   0,
+                    0 ,   0,   0,   0,   0, '1.0322490*q',   0,   0,   0,   0,
+                    0 ,   0,   0,   0,   0,   0, '6.3561642*q',   0,   0,   0,
+                    0 ,   0,   0,   0,   0,   0,   0, '1.4345857*q',   0,   0,
+                    0 ,   0,   0,   0,   0,   0,   0,   0, '27.288992*q',   0,
+                    0 ,   0,   0,   0,   0,   0,   0,   0,   0, '5.6616311*q'), 10, 10)
+
+Qvo <- matrix(list(     '0.01193951*q',             0,    0,   0,   0,   0,   0,   0,   0,   0,
+                    0 ,  '1.2730521*q', '-1.4770388*q',   0,   0,   0,   0,   0,   0,   0,
+                    0 , '-1.4770388*q', '10.5508289*q',   0,   0,   0,   0,   0,   0,   0,
+                    0 ,  '0.6363844*q', '-1.8314508*q',   0, '0.7581285*q',   0,   0,   0,   0,   0,   0,
+                    0 ,  '1.1127029*q', '-7.3200227*q',   0, '5.7352363*q',   0,   0,   0,   0,   0,
+                    0 ,  '0.7349047*q',  '1.8743107*q',   0,   0, '1.0322490*q',   0,   0,   0,   0,
+                    0 , '-1.1603747*q',  '7.6315411*q',   0,   0,   0, '6.3561642*q',   0,   0,   0,
+                    0 ,  '0.9505341*q', '-1.9276072*q',   0,   0,   0,   0, '1.4345857*q',   0,   0,
+                    0 , '-2.3386594*q', '16.7687224*q',   0,   0,   0,   0,   0, '27.288992*q',   0,
+                    0 , '-2.3704107*q',  '0.4574160*q',   0,   0,   0,   0,   0,   0, '5.6616311*q'), 10, 10)
+
+Qgam_full <- matrix(list('0.0119395*q', 0,       0,              0,              0,              0,              0,               0,              0,              0,
+            0,  '1.2730521*q', '-1.4770388*q',  '0.6363844*q',  '1.1127029*q', '-0.7349047*q', '-1.1603747*q',  '0.9505341*q',  '-2.3386594*q', '-2.3704107*q',
+            0, '-1.4770388*q', '10.5508289*q', '-1.8314508*q', '-7.3200227*q',  '1.8743107*q',  '7.6315411*q', '-1.9276072*q',  '16.7687224*q',  '0.4574160*q',
+            0,  '0.6363844*q', '-1.8314508*q',  '0.7581285*q',  '1.3384873*q', '-0.4494808*q', '-1.4025692*q',  '0.4963399*q',  '-2.9523673*q', '-1.0426028*q',
+            0,  '1.1127029*q', '-7.3200227*q',  '1.3384873*q',  '5.7352363*q', '-1.3752243*q', '-5.3067451*q',  '1.4259650*q', '-12.0438808*q', '-0.4523644*q',
+            0, '-0.7349047*q',  '1.8743107*q', '-0.4494808*q', '-1.3752243*q',  '1.0322490*q',  '1.4401821*q', '-0.4509775*q',   '3.0145552*q',  '1.3127885*q',
+            0, '-1.1603747*q',  '7.6315411*q', '-1.4025692*q', '-5.3067451*q',  '1.4401821*q',  '6.3561642*q', '-1.4914250*q',  '12.6427408*q',  '0.4547216*q',
+            0,  '0.9505341*q', '-1.9276072*q',  '0.4963399*q',  '1.4259650*q', '-0.4509775*q', '-1.4914250*q',  '1.4345857*q',  '-3.0854359*q', '-1.8801029*q',
+            0, '-2.3386594*q', '16.7687224*q', '-2.9523673*q','-12.0438808*q',  '3.0145552*q', '12.6427408*q', '-3.0854359*q',  '27.2889916*q',  '0.5867990*q',
+            0, '-2.3704107*q',  '0.4574160*q', '-1.0426028*q', '-0.4523644*q',  '1.3127885*q',  '0.4547216*q', '-1.8801029*q',   '0.5867990*q',  '5.6616311*q'), 10, 10)
+
+Qvo <- matrix(list(0.0119395, 0,       0,              0,              0,              0,              0,               0,              0,              0,
+            0,  1.2730521, -1.4770388,  0.6363844,  1.1127029, -0.7349047, -1.1603747,  0.9505341,  -2.3386594, -2.3704107,
+            0, -1.4770388, 10.5508289, -1.8314508, -7.3200227,  1.8743107,  7.6315411, -1.9276072,  16.7687224,  0.4574160,
+            0,  0.6363844, -1.8314508,  0.7581285,  1.3384873, -0.4494808, -1.4025692,  0.4963399,  -2.9523673, -1.0426028,
+            0,  1.1127029, -7.3200227,  1.3384873,  5.7352363, -1.3752243, -5.3067451,  1.4259650, -12.0438808, -0.4523644,
+            0, -0.7349047,  1.8743107, -0.4494808, -1.3752243,  1.0322490,  1.4401821, -0.4509775,   3.0145552,  1.3127885,
+            0, -1.1603747,  7.6315411, -1.4025692, -5.3067451,  1.4401821,  6.3561642, -1.4914250,  12.6427408,  0.4547216,
+            0,  0.9505341, -1.9276072,  0.4963399,  1.4259650, -0.4509775, -1.4914250,  1.4345857,  -3.0854359, -1.8801029,
+            0, -2.3386594, 16.7687224, -2.9523673, 12.0438808,  3.0145552, 12.6427408, -3.0854359,  27.2889916,  0.5867990,
+            0, -2.3704107,  0.4574160, -1.0426028, -0.4523644,  1.3127885,  0.4547216, -1.8801029,   0.5867990,  5.6616311), 10, 10)
+
+
+for ( i in 1:10){
+  for (j in 1:10){
+    if( Qvo[i,j] != Qvo[j,i] ) {
+      print(paste( i,j, Qvo[i,j], Qvo[j,i]))
+    }
+  }
+}
+
+
+Qtridiag_v_c_terms <-
+    <- matrix(list('v',    'c',      0,      0,       0,       0,       0,       0,        0,       0,
+                   'c',    'v',    'c',      0,       0,       0,       0,       0,        0,       0,
+                     0,    'c',    'v',    'c',       0,       0,       0,       0,        0,       0,
+                     0,      0,    'c',    'v',     'c',       0,       0,       0,        0,       0,
+                     0,      0,      0,    'c',     'v',     'c',       0,       0,        0,       0,
+                     0,      0,      0,      0,     'c',     'v',     'c',       0,        0,       0,
+                     0,      0,      0,      0,       0,     'c',     'v',     'c',        0,       0,
+                     0,      0,      0,      0,       0,       0,     'c',     'v',     'c',        0,
+                     0,      0,      0,      0,       0,       0,       0,     'c',     'v' ,     'c',
+                     0,      0,      0,      0,       0,       0,       0,       0,     'c',     'v'),
+            10, 10)
+
+
+Qv0 <- matrix(NA, ncol = 10, nrow = 10 )
+for (i in 1:10){
+  for (j in 1:10){
+    Qv0[i,j] <- paste("qmult * ", format(V0[i,j], digits = 8))
+  }
+}
+
+Qv0 <- matrix( list(0), 10, 10)
+for (i in 1:10){
+  Qv0[i,i] <- paste0('qmult*', V0[i,i])
+}
+Qvo <- unlist(Qv0)
+
+q <- matrix(list(paste(     'qb', rep(0, 9), 
+                 rep(0, 1), 'qb', rep(0, 8),
+                 rep(0, 2), 'qb', rep(0, 7),
+                 rep(0, 3), 'qb', rep(0, 6),
+                 rep(0, 4), 'qb', rep(0, 5),
+                 rep(0, 5), 'qb', rep(0, 4),
+                 rep(0, 6), 'qb', rep(0, 3),
+                 rep(0, 7), 'qb', rep(0, 2),
+                 rep(0, 8), 'qb', rep(0, 1),
+                 rep(0, 9), 'qb')), 10, 10)
+
+
+
+
+```
+
+
+## State-Space Estimation
+
+
+
+```{r estimate_marss, eval = FALSE}
+model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+
+kemfit_19_Qdiag_equalfx <- MARSS(Yt, model = model.gen, control = list(maxit = 1000))
+saveRDS(kemfit_Q_full, file = 'kemfit_Q_full.rds')
+saveRDS(kemfit_Qgam_diag, file = 'kemfit_por_Qgam_full_unequal.rds')
+
+kemfit_Qtridiag_v_c_terms <- MARSS(Yt, model = model.gen, control = list(maxit = 2000))
+
+
+# Save command for the state space model
+# saveRDS(kemfit_por, file = 'Models/kemfit_por.rds')
+# saveRDS(kemfit_por_Qdiag_unequal, file = 'Models/kemfit_por_Qdiag_unequal.rds')
+readRDS( file = 'Models/kemfit_por_Qdiag_unequal.rds' )
+
+em
+saveRDS()
+
+# Check if kemfit model exists and read, else recompute
+if( file.exists('Models/kemfit_por.rds')){
+  kemfit_por_Qdiag_two_valued <- readRDS('Models/kemfit_por.rds')
+} else {
+  kemfit_por_Qdiag_unequal <- MARSS(Yt, model = model.gen, control = list(maxit = 5000 ))
+}
+
+# Computes states (xtT, xtt, xtt1, variances (VtT, Vtt, vtt1), and similar stats on kemfit object)
+kemfit_por_Qdiag_unequal_kfss <- MARSSkfss(kemfit_por_Qdiag_unequal)
+
+# Error: Stopped in MARSSboot() due to problem(s) with function arguments.
+#   paramCIs_innovation = MARSSparamCIs(kemfit_por, method = 'innovations')
+
+
+# Innovations bootstrapping uses the innovations resampling and can only be done if there are no missing values in the data.
+#   MARSSboot( kemfit_por, nboot = 1000, output = 'parameters', sim = 'innovations', param.gen = 'MLE' )
+
+kemfit_19_Qdiag_equal_fx  <- MARSS(Yt, model = model.gen, control = list(maxit = 4000))
+kemfit_19_Qdiag_equal_fx1 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx))
+kemfit_19_Qdiag_equal_fx2 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx1))
+kemfit_19_Qdiag_equal_fx3 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx2))
+kemfit_19_Qdiag_equal_fx4 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx3))
+kemfit_19_Qdiag_equal_fx5 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx4))
+kemfit_19_Qdiag_equal_fx6 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx5))
+kemfit_19_Qdiag_equal_fx7 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx6))
+kemfit_19_Qdiag_equal_fx8 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx7))
+kemfit_19_Qdiag_equal_fx9 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx8))
+kemfit_19_Qdiag_equal_fx10 <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kemfit_19_Qdiag_equal_fx9))
+
+```
+## Results from state-space modeling
+
+Success! abstol and log-log tests passed at 571 iterations.
+Alert: conv.test.slope.tol is 0.5.
+Test with smaller values (<0.1) to ensure convergence.
+
+MARSS fit is
+Estimation method: kem 
+Convergence test: conv.test.slope.tol = 0.5, abstol = 0.001
+Estimation converged in 571 iterations. 
+Log-likelihood: -583.9928 
+AIC: 1171.986   AICc: 1172.117   
+ 
+        Estimate
+Q.qicpt  172.694
+Q.qknot    0.105
+Initial states (x0) defined at t=0
+
+Standard errors have not been calculated. 
+Use MARSSparamCIs to compute CIs and bias estimates.
+
+## GAM for stage_flow_day_19 meaurements
+
+```{r eval_state_space, fig.width = 9}
+
+# Store results of MARSS modeling
+df_stage_flow_allDays$ytT    <- as.vector(kemfit_19_Qdiag_equal_fx10$ytT)
+df_stage_flow_allDays$ytT.se <- as.vector(kemfit_19_Qdiag_equal_fx10$ytT.se)
+
+# Compare rating with kfgam estimates
+
+stage_knots_19 <- predict( gam_rate_19.0, newdata = data.frame( stage = df_stage_flow_allDays$stage_mean_day),
+                                           type = 'lpmatrix')
+
+stage_knots_19 <- predict( gam_rate_19.0, type = 'lpmatrix')
+
+
+
+stage_knots_19 <- cbind(rating19.0$stage, stage_knots_19) 
+colnames(stage_knots_19)[1] <- 'stage'
+
+tmp <- meas_data %>% 
+  left_join( df_stage_flow_allDays, by = c('measurement_dt' = 'day') )
+
+ndx_kfss <- which( df_stage_flow_allDays$day %in% meas_data$measurement_dt )
+flow_xtT <- matrix(NA, nrow = 731, ncol = length(ndx_kfss) )
+
+for (i in 1:length(ndx_kfss)){
+  flow_xtT[ , i ] <- stage_knots_19_matrix %*% matrix(kemfit_por_Qdiag_unequal_kfss$xtT[ 1:10, ndx_kfss[ i ]], 10, 1)
+}
+
+sd_stage <- apply(flow_xtT, 1, FUN = identity, na.rm = TRUE)
+
+plot(sd_stage)
+
+stage_knots_19_matrix <- as.matrix(stage_knots_19[,2:11])
+
+
+plot(sd_stage, rating19.0$stage)
+
+state_coefs_19.0  <- matrix(kemfit_por_kfss$xtT[ 1:10,    1], 10, 1)
+state_coefs_20.0  <- matrix(kemfit_por_kfss$xtT[ 1:10, 5972], 10, 1)
+state_coefs_20.1  <- matrix(kemfit_por_kfss$xtT[ 1:10, 6463], 10, 1)
+state_coefs_21.0  <- matrix(kemfit_por_kfss$xtT[ 1:10, 6918], 10, 1)
+state_coefs_22.0  <- matrix(kemfit_por_kfss$xtT[ 1:10, 8746], 10, 1)
+
+rating19$flow_kfgam19.0 <- stage_knots_19_matrix %*% state_coefs_19.0
+rating19$flow_kfgam20.0 <- stage_knots_19_matrix %*% state_coefs_20.0
+rating19$flow_kfgam20.1 <- stage_knots_19_matrix %*% state_coefs_20.1
+rating19$flow_kfgam21.0 <- stage_knots_19_matrix %*% state_coefs_21.0
+rating19$flow_kfgam22.0 <- stage_knots_19_matrix %*% state_coefs_22.0
+
+
+# Retrieve daily flows for rating period 19
+
+rating19.0[, c('stage', 'rated_flow_19.0', 'flow_kfgam19.0', 'flow_kfgam20.0', 'flow_kfgam20.1',
+                    'flow_kfgam21.0', 'flow_kfgam22.0')] %>% 
+  rename( flow_rating19.0 = rated_flow_19.0) %>% 
+  gather( key = 'Estimator', value = 'flow_cfs', flow_rating19.0, flow_kfgam19.0, flow_kfgam20.0, 
+          flow_kfgam20.1, flow_kfgam21.0, flow_kfgam22.0, -stage) %>% 
+  mutate( Estimator = factor(Estimator, levels = c('flow_rating19.0', 'flow_kfgam19.0', 'flow_kfgam20.0',
+                                                  'flow_kfgam20.1', 'flow_kfgam21.0', 'flow_kfgam22.0'))) %>% 
+  ggplot( aes(x = flow_cfs, y = stage, color =  Estimator )) +
+  geom_line() +
+  theme_bw() +
+  theme( legend.position = 'right') +
+  xlab( 'Streamflow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) + 
+  labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') 
+
+
+```
+
+```{r summarize_kfgam_rating }
+
+# Convert matrix containing flow ratings during por to dataframe
+df_flow_xtT <- as.data.frame( flow_xtT)
+
+# Flows for fixed stages
+flow_xtT_min_stage <- apply(flow_xtT[,-76], 1, FUN = min)
+flow_xtT_max_stage <- apply(flow_xtT, 1, FUN = max)
+flow_xtT_ave_stage <- apply(flow_xtT, 1, FUN = mean)
+flow_xtT_med_stage <- apply(flow_xtT, 1, FUN = median)
+
+
+flow_xtT_p05_stage <- apply(flow_xtT, 1, FUN = quantile, probs = 0.05)
+flow_xtT_p95_stage <- apply(flow_xtT, 1, FUN = quantile, probs = 0.95)
+
+flow_xtT_p01_stage <- apply(flow_xtT, 1, FUN = quantile, probs = 0.01)
+flow_xtT_p99_stage <- apply(flow_xtT, 1, FUN = quantile, probs = 0.99)
+
+
+
+df_flow_xtT_stats  <- data.frame( stage = rating19.0$stage, flow_xtT_min_stage = flow_xtT_min_stage,
+                                  flow_xtT_max_stage = flow_xtT_max_stage, 
+                                  flow_xtT_ave_stage = flow_xtT_ave_stage,
+                                  flow_xtT_med_stage = flow_xtT_med_stage,
+                                  flow_xtT_p01_stage = flow_xtT_p01_stage,
+                                  flow_xtT_p99_stage = flow_xtT_p99_stage)
+
+df_flow_xtT_stats %>% 
+  gather( key = 'stat', value = 'flow_cfs', flow_xtT_min_stage, flow_xtT_ave_stage, 
+          flow_xtT_max_stage, flow_xtT_med_stage, flow_xtT_p01_stage, 
+          flow_xtT_p99_stage) %>% 
+  ggplot( aes( x = flow_cfs, y = stage, color = stat)) +
+  geom_line() +
+  theme_bw() +
+  theme( legend.position = 'bottom') +
+  scale_x_sqrt( breaks = c(1, 10, 50, 100, 500, 1000, 2000, 3000, 4000, 5000, 6000, 7000)) +
+  scale_y_continuous( breaks = seq(1, 8, 1))
+
+
+```
+
+```{r eval = FALSE}
+
+
+daily_means <- readNWISdv( '04122500', parameterCd = '00060', startDate = '1994-10-25',
+                               endDate = '2011-03-01')
+
+daily_means <- renameNWISColumns( daily_means )
+
+
+df_stage_flow_allDays$flow_daily <- daily_means$Flow
+
+
+rating19[, c('stage', 'rated_flow_19', 'flow_kfgam19.0', 'flow_kfgam20.0', 'flow_kfgam20.1',
+                    'flow_kfgam21.0', 'flow_kfgam22.0')] %>% 
+  rename( flow_rating19.0 = rated_flow_19) %>% 
+  gather( key = 'Estimator', value = 'flow_cfs', flow_rating19.0, flow_kfgam19.0, flow_kfgam20.0, 
+          flow_kfgam20.1, flow_kfgam21.0, flow_kfgam22.0, -stage) %>% 
+  mutate( Estimator = factor(Estimator, levels = c( 'flow_rating19.0', 'flow_kfgam19.0', 
+          'flow_kfgam20.0', 'flow_kfgam20.1', 'flow_kfgam21.0', 'flow_kfgam22.0' ) )) %>% 
+  ggplot( aes( x = day, y = flow_daily  )) +
+  geom_line( color = 'blue', alpha = 0.5 ) +
+  geom_line( aes( y = ytT ), color = 'red', alpha = 0.5 ) +
+  theme_bw() + 
+  ylab( 'Stage, in feet above streamgage datum') +
+  xlab( 'Streamflow, in cubic feet per second' )
+  
+
+
+
+
+
+```
+
+
+
+
+```{r }
+
+# Correlation among parameters
+ggcorrplot( cov2cor( vcov( baye_gam_dnorm)), type = 'lower', 
+                     insig = 'blank',  lab = TRUE, digits = 2)
+
+```
+
+
+
+```{r annimate_rating}
+
+library(gganimate)
+#> Loading required package: ggplot2
+
+# We'll start with a static plot
+p <- ggplot(iris, aes(x = Petal.Width, y = Petal.Length)) + 
+  geom_line() +
+  transition_states(Species,
+                    transition_length = 2,
+                    state_length = 1)
+
+p
+
+
+animate(p, renderer = file_renderer('~/animation/'))[1:6]
+animate(p, 'output.gif')
+
+p <- rating_long %>% 
+  ggplot( aes(x = rated_flow, y = stage, color =  rating_no )) +
+  geom_point() +
+  transition_states(rating_no,
+                    transition_length = 1,
+                    state_length = 1) +
+  theme_bw() +
+  theme( legend.position = 'right') +
+  xlab( 'Streamflow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) + 
+  labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
+  geom_line( data = rating19.0, aes( x = rated_flow_19.0, y = stage), color = 'black', linetype = 'dots' )
+
+animate(p, nframes = 6, fps = 2)
+
+
+
+tmp <- as.data.frame(  as.table( flow_xtT ))
+colnames(tmp) <- c('Date', 'stage', 'flow')
+tmp$stage <- rating19.0$stage
+tmp$Date  <- rep( df_stage_flow_allDays$day[ndx_kfss] , each = 731)
+
+rating_days_measured <- tmp %>% 
+  ggplot( aes(x = flow, y = stage )) +
+  geom_point( color = 'blue', size = 0.5 ) +
+    transition_time(Date) +
+  labs(title = 'Date of Measurement: {frame_time}' ) + 
+  theme_bw() +
+  theme( legend.position = 'right') +
+  xlab( 'Streamflow, in cubic feet per second' ) +
+  ylab( 'Stage, in feet above gage datum' ) + 
+  # labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
+  geom_line( data = rating19.0, aes( x = rated_flow_19.0, y = stage), color = 'black', linetype = 'dots' )
+
+animate(rating_days_measured, nframes = 155, fps = 10)
+```
