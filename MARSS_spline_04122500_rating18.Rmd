@@ -153,7 +153,7 @@ colnames( rating18 ) <- c('rated_flow', 'stage')
 
 # Use rating18 as the initial rating
 rating_init   <- rating18
-#   Rename column rated_flow_18 to rated_flow_init
+#   Rename column rated18_flow to rated_flow_init
 colnames(rating_init)[1] <- 'rated_flow_init'
 
 rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
@@ -397,6 +397,158 @@ rating_long %>%
   
 ```
 
+```{r gam_model_18}
+
+discrete_meas_wt <- discrete_meas %>% 
+  group_by( rating ) %>% 
+  mutate( Mean = mean( flow_discrete_mea ),
+          SD   =   sd( flow_discrete_mea ),
+          Std  = (flow_discrete_mea - Mean)/ SD,
+          wt   = abs(Std) / sum(abs(Std )))  %>% 
+  ungroup( rating ) 
+  
+
+# Compute GAM model for each rating period
+gam18_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea), 
+                     weights = wt,
+                     data = discrete_meas_wt[ discrete_meas_wt$rating == 18, ],
+                     family = Gamma(link = log))
+
+gam19_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+                     weights = wt, 
+                     data = discrete_meas_wt[ discrete_meas_wt$rating == 19, ],
+                     family = Gamma(link = log))
+
+gam20_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+                     weights = wt, 
+                     data = discrete_meas_wt[ discrete_meas_wt$rating == 20, ],
+                     family = Gamma(link = log))
+
+gam21_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+                     weights = wt, 
+                     data = discrete_meas_wt[ discrete_meas_wt$rating == 21, ],
+                     family = Gamma(link = log))
+
+
+summary(gam18_model)
+summary(gam19_model)
+summary(gam20_model)
+summary(gam20_model)
+
+
+# plot(gam_model_18)
+# plot(gam_model_19)
+# plot(gam_model_20)
+# plot(gam_model_21)
+
+gam18_pred <- predict(gam18_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+                       type = 'response')
+
+gam19_pred <- predict(gam19_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+                       type = 'response')
+
+gam20_pred <- predict(gam20_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+                       type = 'response')
+
+gam21_pred <- predict(gam21_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+                       type = 'response')
+
+
+# Compile and compute gam model results
+gam18_df <- data.frame('stage'        = rating21$stage,
+                        'gam18_flow'  = gam18_pred$fit, 
+                        'gam18_se'    = gam18_pred$se.fit)
+gam18_df$ci18_025 <- gam18_df$gam18_flow + qnorm(0.025) * gam18_df$gam18_se
+gam18_df$ci18_975 <- gam18_df$gam18_flow + qnorm(0.975) * gam18_df$gam18_se
+
+gam19_df <- data.frame('stage'        = rating21$stage,
+                        'gam19_flow'  = gam19_pred$fit, 
+                        'gam19_se'    = gam19_pred$se.fit)
+gam19_df$ci19_025 <- gam19_df$gam19_flow + qnorm(0.025) * gam19_df$gam19_se
+gam19_df$ci19_975 <- gam19_df$gam19_flow + qnorm(0.975) * gam19_df$gam19_se
+
+gam20_df <- data.frame('stage'        = rating21$stage,
+                        'gam20_flow'  = gam20_pred$fit, 
+                        'gam20_se'    = gam20_pred$se.fit)
+gam20_df$ci20_025 <- gam20_df$gam20_flow + qnorm(0.025) * gam20_df$gam20_se
+gam20_df$ci20_975 <- gam20_df$gam20_flow + qnorm(0.975) * gam20_df$gam20_se
+
+gam21_df <- data.frame('stage'        = rating21$stage,
+                        'gam21_flow'  = gam21_pred$fit, 
+                        'gam21_se'    = gam21_pred$se.fit)
+gam21_df$ci21_025 <- gam21_df$gam21_flow + qnorm(0.025) * gam21_df$gam21_se
+gam21_df$ci21_975 <- gam21_df$gam21_flow + qnorm(0.975) * gam21_df$gam21_se
+
+rating18 <- rating18 %>% 
+  rename( rated18_flow = rated_flow) 
+rating19 <- rating19 %>% 
+  rename( rated19_flow = rated_flow) 
+rating20 <- rating20 %>% 
+  rename( rated20_flow = rated_flow) 
+rating21 <- rating21 %>% 
+  rename( rated21_flow = rated_flow) 
+
+gam_df <- gam18_df %>% 
+  full_join(gam19_df, by = 'stage') %>% 
+  full_join(gam20_df, by = 'stage') %>% 
+  full_join(gam21_df, by = 'stage') %>% 
+  full_join(rating18, by = 'stage') %>% 
+  full_join(rating19, by = 'stage') %>% 
+  full_join(rating20, by = 'stage') %>% 
+  full_join(rating21, by = 'stage')
+
+gam_long <- gam_df %>% 
+  gather( key = 'flow_type', 'flow_cfs', -stage) %>% 
+  dplyr::filter( !grepl('_se', flow_type) ) %>% 
+  mutate( rating = case_when( grepl('18', flow_type) ~ 18,
+                              grepl('19', flow_type) ~ 19,
+                              grepl('20', flow_type) ~ 20,
+                              grepl('21', flow_type) ~ 21))
+
+ndx_025 <- which( grepl('025', gam_long$flow_type))
+gam_long$flow_type[ndx_025] <- 'ci_025'
+ndx_975 <- which( grepl('975', gam_long$flow_type))
+gam_long$flow_type[ndx_975] <- 'ci_975'
+ndx_rat <- which( grepl('rated', gam_long$flow_type ))
+gam_long$flow_type[ndx_rat] <- 'rated_flow'
+ndx_gam <- which( grepl('gam', gam_long$flow_type))
+gam_long$flow_type[ndx_gam] <- 'gam_flow'
+  
+```
+
+
+
+```{r plot_by_rating, fig.height = 10, fig.width = 10}
+gam_long %>% 
+  ggplot( aes( x = flow_cfs, y = stage, color = flow_type)) +
+  geom_line() +
+  facet_wrap( ~ rating, ncol = 2 ) +
+  theme_bw() +
+  scale_color_manual( values = c('cyan', 'cyan', 'navy', 'red') ) +
+  scale_x_continuous( limits = c(0, 10000)) +
+  theme( legend.position = 'bottom') +
+  geom_point( data = discrete_meas, 
+              aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating), color = 'blue')
+  
+  
+
+# df_gam_18 %>% 
+#   gather( key = 'flow_attr', 'flow_stat', gam_flow, ci_025, ci_975 ) %>% 
+#   ggplot( aes( x = flow_stat, y = stage, color = flow_attr)) +
+#   geom_line() +
+#   scale_color_manual( values = c('cyan', 'cyan', 'navy') ) +
+#   scale_linetype_manual( values = c('dotted',  'dotted', 'solid') ) +
+#   geom_line( data = rating18, aes(x = rated_flow, y = stage, color = NULL), color = 'red') +
+#   geom_point( data = discrete_meas[discrete_meas$rating == 18, ], 
+#               aes( x = flow_discrete_mea, y = stage_discrete_mea), color = 'blue') +
+#   theme_bw() +
+#   theme( legend.position = 'bottom')
+  
+  
+
+
+```
+
 
 
 ## Read unit stage values for 04122500 Pere Marquette River at Scottville, MI
@@ -412,6 +564,7 @@ colnames(stage_unit)[2]   <- 'datetime'
 stage_unit$datetime <- as_datetime(stage_unit$datetime, tz = 'America/New_York')
 
 ```
+
 
 
 ```{r }
