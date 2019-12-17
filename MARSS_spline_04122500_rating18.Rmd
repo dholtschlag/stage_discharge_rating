@@ -127,10 +127,6 @@ rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '
 
 tab_no <- tab_no + 1
 
-```
-
-```{r show_rating_history, echo = FALSE}
-
 rating_history %>% 
   kable( caption = paste0('Table ', tab_no, '. Streamflow Rating Curve History at ', 
                           site_info$site_no, site_info$station_nm )) %>% 
@@ -202,6 +198,8 @@ rating_long %>%
 
 
 ## Develop a generatized additive model (GAM) for rating 18
+
+# This just fits a rating (18) directly. 
 
 ```{r gam_rating, fig.width = 9, echo = FALSE }
 
@@ -409,8 +407,8 @@ discrete_meas_wt <- discrete_meas %>%
   
 
 # Compute GAM model for each rating period
-gam18_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea), 
-                     weights = wt,
+gam18_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr'), 
+                     weights = wt, method = 'REML',
                      data = discrete_meas_wt[ discrete_meas_wt$rating == 18, ],
                      family = Gamma(link = log))
 
@@ -514,21 +512,29 @@ gam_long$flow_type[ndx_rat] <- 'rated_flow'
 ndx_gam <- which( grepl('gam', gam_long$flow_type))
 gam_long$flow_type[ndx_gam] <- 'gam_flow'
   
+
 ```
 
+```{r }
+print(gam18_model$edf)
 
+
+
+```
 
 ```{r plot_by_rating, fig.height = 10, fig.width = 10}
 gam_long %>% 
-  ggplot( aes( x = flow_cfs, y = stage, color = flow_type)) +
-  geom_line() +
+  ggplot( aes( x = flow_cfs, y = stage, color = flow_type )) +
+  geom_line( aes( size = flow_type ), alpha = 0.25 ) +
   facet_wrap( ~ rating, ncol = 2 ) +
   theme_bw() +
-  scale_color_manual( values = c('cyan', 'cyan', 'navy', 'red') ) +
+  scale_color_manual( values = c('forestgreen', 'forestgreen', 'navy', 'red') ) +
+  scale_size_manual(  values= c(           1 ,            1,     1.25,  1.25) ) +
   scale_x_continuous( limits = c(0, 10000)) +
   theme( legend.position = 'bottom') +
   geom_point( data = discrete_meas, 
-              aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating), color = 'blue')
+              aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating), color = 'blue') +
+  labs( title = 'Comparison of manual and GAM ratings by rating number' )
   
   
 
@@ -634,7 +640,7 @@ if( file.exists('flow_daily_pub.RData')){
 
 
 df_stage_flow_allDays <- df_stage_flow_allDays %>% 
-  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c( 'day' = 'Date' )) %>% 
+  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date' )) %>% 
   rename( 'flow_daily_pub'    = 'Flow',
           'Date'              = 'day')
 
@@ -646,7 +652,7 @@ ndx_miss <- which( is.na(df_stage_flow_allDays$stage_mean_day ))
 dates_missing <- df_stage_flow_allDays$Date[ndx_miss]
 
 # Estimate daily mean stage from published daily mean flow
-stage_missing <- approx( x = rating19$rated_flow, y = rating19$stage, 
+stage_missing <- approx( x = rating21$rated21_flow, y = rating21$stage, 
                          xout =df_stage_flow_allDays$flow_daily_pub[ndx_miss])
 
 
@@ -683,8 +689,8 @@ print(paste('The measurement vector is',
 
 # Zt is the time-varying design matrix in the measurement equation
 #   Zt contains the intercept and knot components for the spline from the GA model 
-Zt <- t(predict( gam_model, newdata = data.frame( stage = df_stage_flow_allDays$stage_mean_day),
-                                           type = 'lpmatrix'))
+Zt <- t(predict( gam21_model, newdata = data.frame( stage_discrete_mea = df_stage_flow_allDays$stage_mean_day),
+                                           type = 'lpmatrix') )
 # Remove row names
 rownames(Zt) <- NULL
 
