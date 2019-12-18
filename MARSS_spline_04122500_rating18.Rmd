@@ -407,22 +407,24 @@ discrete_meas_wt <- discrete_meas %>%
   
 
 # Compute GAM model for each rating period
-gam18_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr'), 
-                     weights = wt, method = 'REML',
+knts = 5; # knts is the number of knots 
+
+gam18_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts), 
+                     weights = wt, 
                      data = discrete_meas_wt[ discrete_meas_wt$rating == 18, ],
                      family = Gamma(link = log))
 
-gam19_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+gam19_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                      weights = wt, 
                      data = discrete_meas_wt[ discrete_meas_wt$rating == 19, ],
                      family = Gamma(link = log))
 
-gam20_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+gam20_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                      weights = wt, 
                      data = discrete_meas_wt[ discrete_meas_wt$rating == 20, ],
                      family = Gamma(link = log))
 
-gam21_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea),
+gam21_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                      weights = wt, 
                      data = discrete_meas_wt[ discrete_meas_wt$rating == 21, ],
                      family = Gamma(link = log))
@@ -561,13 +563,29 @@ gam_long %>%
 
 ```{r unit_daily_stage, echo = FALSE, warning = FALSE, message = FALSE}
 
-stage_unit <- read.csv(file = 'Data/04122500/stage/unit_stage.csv',
-                       comment.char = '#', 
-                       stringsAsFactors = FALSE, header = TRUE)
+if( file.exists('stage_unit.RData')){
+  print('Loading published unit stage data from RData file.')
+  load('stage_unit.RData')
+} else {
+  print('Retrieving daily flow from Aquarius Retrieval')
+  stage_unit <- read.csv('Data/04122500/stage/Gage_height.ft@04122500.EntireRecorda.csv', 
+                         header = TRUE, sep = ',', stringsAsFactors = FALSE, comment = '#')
+  # Standardize field names
+  stage_unit     <- renameNWISColumns(stage_unit)
+  stage_unit$dateTime <- as_datetime(stage_unit$Timestamp..UTC.05.00, tz = 'America/New_York')
+  colnames(stage_unit)[3] <- 'stage'
+  save(stage_unit, file = 'stage_unit.RData')
+}
 
-colnames(stage_unit)[2]   <- 'datetime'
-# Convert from character field to datetime referenced to EST
-stage_unit$datetime <- as_datetime(stage_unit$datetime, tz = 'America/New_York')
+# Summarize unit stage to daily mean stage
+stage_day <- stage_unit %>% 
+  group_by(day = floor_date( dateTime, 'day')) %>% 
+  summarize( stage_daily_mean  = mean( stage, na.rm = TRUE ),
+             n         = n()) %>% 
+  ungroup() %>% 
+  arrange( day ) %>% 
+  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
+          day_date  = as.Date( day )) 
 
 ```
 
@@ -575,16 +593,6 @@ stage_unit$datetime <- as_datetime(stage_unit$datetime, tz = 'America/New_York')
 
 ```{r }
 
-# Summarize unit stage to daily mean stage
-stage_day <- stage_unit %>% 
-  rename( stage = Value ) %>% 
-  group_by(day = floor_date( datetime, 'day')) %>% 
-  summarize( stage_mean_day  = mean( stage, na.rm = TRUE ),
-             n         = n()) %>% 
-  ungroup() %>% 
-  arrange( day ) %>% 
-  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
-          day_date  = as.Date( day )) 
 
 
 # Measured flows and daily stages for the interval when rating 19 was active
@@ -614,7 +622,7 @@ df_discrete_meas <- discrete_meas %>%
 df_stage_flow_allDays <-df_stage_flow_allDays %>% 
   left_join( df_discrete_meas[, c('measurement_dt', 'flow_discrete_mea', 'qualifier', 'control_type', 'se_flow')], 
              by = c( 'day'  = 'measurement_dt')) %>% 
-  left_join( stage_day[, c('day_date', 'stage_mean_day')], by = c( 'day' = 'day_date' )) %>% 
+  left_join( stage_day[, c('day_date', 'stage_daily_mean')], by = c( 'day' = 'day_date' )) %>% 
   filter( day >= date_beg_model & day <= date_end_model )
 
 ```
@@ -623,7 +631,7 @@ df_stage_flow_allDays <-df_stage_flow_allDays %>%
 
 ```{r missing_stage}
 
-
+# Load daily flows to estimate missing daily mean stage 
 if( file.exists('flow_daily_pub.RData')){
   print('Loading published daily_means from RData file.')
   load('flow_daily_pub.RData')
@@ -640,23 +648,23 @@ if( file.exists('flow_daily_pub.RData')){
 
 
 df_stage_flow_allDays <- df_stage_flow_allDays %>% 
-  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date' )) %>% 
+  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date')) %>% 
   rename( 'flow_daily_pub'    = 'Flow',
           'Date'              = 'day')
 
 
 # find indices of missing stage_mean_day values
-ndx_miss <- which( is.na(df_stage_flow_allDays$stage_mean_day ))
+ndx_ina <- which( is.na(df_stage_flow_allDays$stage_daily_mean ))
 
 # Find dates for missing data
-dates_missing <- df_stage_flow_allDays$Date[ndx_miss]
+dates_missing <- df_stage_flow_allDays$Date[ndx_ina]
 
-# Estimate daily mean stage from published daily mean flow
+# Estimate daily mean stage from published daily mean flow using rating 21 (which has largest stage range)
 stage_missing <- approx( x = rating21$rated21_flow, y = rating21$stage, 
-                         xout =df_stage_flow_allDays$flow_daily_pub[ndx_miss])
+                         xout =df_stage_flow_allDays$flow_daily_pub[ndx_ina])
 
 
-df_stage_flow_allDays$stage_mean_day[ ndx_miss ] <- stage_missing$y
+df_stage_flow_allDays$stage_daily_mean[ ndx_ina ] <- stage_missing$y
 
 ```
 
@@ -678,7 +686,7 @@ Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
 
 # Yt is the measurement vector that contains directly measured flows (not daily means)
 #   stage_flow_day_19 as 1 x T matrix
-Yt <- matrix(df_stage_flow_allDays$flow_discrete_mea, nrow = 1)
+Yt <- matrix( log(df_stage_flow_allDays$flow_discrete_mea), nrow = 1)
 
 # Indexes for measured flows in vector
 ndx_ian_Yt <- which( !is.na(Yt) )
@@ -689,13 +697,13 @@ print(paste('The measurement vector is',
 
 # Zt is the time-varying design matrix in the measurement equation
 #   Zt contains the intercept and knot components for the spline from the GA model 
-Zt <- t(predict( gam21_model, newdata = data.frame( stage_discrete_mea = df_stage_flow_allDays$stage_mean_day),
+Zt <- t(predict( gam21_model, newdata = data.frame( stage_discrete_mea = df_stage_flow_allDays$stage_daily_mean),
                                            type = 'lpmatrix') )
 # Remove row names
 rownames(Zt) <- NULL
 
 # Populate the Zt array in the format that MARSS expects
-Zt <- array(Zt, dim = c(1, 10, nrow(df_stage_flow_allDays)))
+Zt <- array(Zt, dim = c(1, knts, nrow(df_stage_flow_allDays)))
 
 # A is an unused time-varying vector in the measurement equation
 A  <- 'zero'
@@ -728,12 +736,23 @@ fig_no <- fig_no + 1
 # Drift vector
 U  <- 'zero'
 # Initial state vector from GA model
-X0 <- as.matrix( as.numeric(coefficients(gam_model)), 10, 1)
+X0 <- as.matrix( as.numeric(coefficients(gam18_model)), 10, 1)
 # Initial covariance of the state model
-V0 <- gam_model$Vp
+V0 <- gam18_model$Vp
 # 
 # State variance matrix
 Q = 'diagonal and equal'
+
+model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+
+kem_fit_a <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_f))
+kem_fit_b <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_a))
+kem_fit_c <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_b))
+kem_fit_d <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_c))
+kem_fit_e <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_d))
+kem_fit_f <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_e))
+saveRDS(kem_fit_f, file = 'kem_fit_f.rds') 
+
 ```
 
 
@@ -745,6 +764,7 @@ Parameter estimation with MARSS requires extended computation. A previous comput
 
 model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
 
+kem_fit_a <- MARSS(Yt, model = model.gen, control = list(maxit = 1000))
 
 # kemfit_18_Qdiag_equal_b <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),
 #                                inits = coef(kemfit_18_Qdiag_equal_a) )
