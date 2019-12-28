@@ -120,7 +120,7 @@ if( file.exists(site_file)){
 ### Streamgage Attributes
 
 
-```{r show_site_info}
+```{r show_site_info, fig.height = 2}
 
 site_info %>% 
   rename( drain_area_mi2 = drain_area_va,
@@ -136,7 +136,7 @@ site_info %>%
 ```
 ### Get rating period info and display
 
-```{r rating_historyE}
+```{r rating_historyE, fig.height = 3}
 
 # Read rating history
 rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
@@ -658,16 +658,39 @@ stage_missing <- approx( x = rating21$rated21_flow, y = rating21$stage,
 
 df_stage_flow_allDays$stage_daily_mean[ ndx_ina ] <- stage_missing$y
 
+```
 
-# Substitute discrete stage and time of discrete flow measurement
 
-ndx_ian <- which( !is.na( df_stage_flow_allDays$stage_discrete_mea ) )
+```{r mean_discrete stge}
 
-del_stage <- df_stage_flow_allDays$stage_discrete[ ndx_ian] - df_stage_flow_allDays[ ndx_ian, 'stage_daily_mean' ]
 
 df_stage_flow_allDays[ ndx_ian, ] %>% 
   ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
-  geom_point( color = 'blue')
+  geom_point( color = 'blue') +
+  theme_bw() +
+  scale_x_log10( breaks = seq(1, 6, by = 1) ) +
+  scale_y_log10( breaks = seq(1, 6, by = 1) ) +
+  geom_abline( intercept = 0, slope = 1, color = 'salmon') +
+  xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
+  ylab('Daily mean stage on days of discrete measurements, in feet') +
+  ggtitle('Figure 9. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.')
+
+# 
+# Substitute discrete stage and time of discrete flow measurement
+#   Find indices of discrete stage-flow measurements
+ndx_ian <- which( !is.na( df_stage_flow_allDays$stage_discrete_mea ) )
+#   Find discrepancies between daily mean and discrete stage on days of discrete measurements
+del_stage <- df_stage_flow_allDays$stage_discrete[ ndx_ian] - df_stage_flow_allDays[ ndx_ian, 'stage_daily_mean' ]
+#   Find index of largest (positive) discrepancy
+ndx_day <- which( del_stage == max( del_stage) )
+
+# Find indices of unit stage on day of max stage discrepancy 
+ndx_unit_stage <- which( as.Date(stage_unit$dateTime) == df_stage_flow_allDays$Date[ ndx_ian][ndx_day] )
+# Result is an empty vector.  There are no unit stages on this day.
+ndx_stage <- which( as.Date(stage_unit$dateTime) == as.Date('1992-07-22') ) 
+
+# Substitude discrete stage values for mean daily stage on days of discrete measurement
+df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage_discrete_mea[ ndx_ian ]
 
 
 ```
