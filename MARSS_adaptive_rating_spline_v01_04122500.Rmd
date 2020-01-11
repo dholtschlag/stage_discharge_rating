@@ -347,7 +347,7 @@ rating_long %>%
 
 Estimate Generalized Additive Models for each rating curve and for the POA
 
-```{r gam_model_estimate}
+```{r gam_dataPair_estimate}
 
 # discrete_meas_wt <- discrete_meas %>% 
 #   group_by( rating ) %>% 
@@ -364,38 +364,38 @@ knts = 5; # knts is the number of knots
 gam18_rating <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
                      data = rating18, family = Gamma(link = log)) 
 
-gam18_model <-  gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts), 
+gam18_measPair <-  gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts), 
                       # weights = wt, 
                       method = 'REML',
                       data = discrete_meas[ discrete_meas$rating == 18, ],
                       family = Gamma(link = log))
 
-gam19_model  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
+gam19_measPair  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                       # weights = wt, 
                       data = discrete_meas[ discrete_meas$rating == 19, ],
                       family = Gamma(link = log))
 
-gam20_model  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
+gam20_measPair  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                       # weights = wt, 
                       data = discrete_meas[ discrete_meas$rating == 20, ],
                       family = Gamma(link = log))
 
-gam21_model  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
+gam21_measPair  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                       # weights = wt, 
                       data = discrete_meas[ discrete_meas$rating == 21, ],
                       family = Gamma(link = log))
 
-gamPOA_model <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
+gamPOA_measPair <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
                       # weights = wt, 
                       data = discrete_meas,
                       family = Gamma(link = log))
 
 # Compute GAM summary statistics
-gam18_summary  <- summary(gam18_model)
-gam19_summary  <- summary(gam19_model)
-gam20_summary  <- summary(gam20_model)
-gam21_summary  <- summary(gam21_model)
-gamPOA_summary <- summary(gamPOA_model)
+gam18_summary  <- summary(gam18_measPair)
+gam19_summary  <- summary(gam19_measPair)
+gam20_summary  <- summary(gam20_measPair)
+gam21_summary  <- summary(gam21_measPair)
+gamPOA_summary <- summary(gamPOA_measPair)
 
 
 gam_stats <- data.frame('Model' = c('gam18', 'gam19', 'gam20', 'gam21', 'gamPOA'),
@@ -404,20 +404,20 @@ gam_stats <- data.frame('Model' = c('gam18', 'gam19', 'gam20', 'gam21', 'gamPOA'
                            'Residual.df'    =  format(c(gam18_summary$residual.df, gam19_summary$residual.df ,
                                                         gam20_summary$residual.df, gam21_summary$residual.df,
                                                         gamPOA_summary$residual.df), digits = 4),
-                           'Intercept'      = format(c( gam18_model$coefficients[1], gam19_model$coefficients[1],
-                           gam20_model$coefficients[1], gam21_model$coefficients[1], gamPOA_model$coefficients[1]),
+                           'Intercept'      = format(c( gam18_measPair$coefficients[1], gam19_measPair$coefficients[1],
+                           gam20_measPair$coefficients[1], gam21_measPair$coefficients[1], gamPOA_measPair$coefficients[1]),
                            digits = 4),
-                           'beta1'      = format(c( gam18_model$coefficients[2], gam19_model$coefficients[2],
-                           gam20_model$coefficients[2], gam21_model$coefficients[2], gamPOA_model$coefficients[2]),
+                           'beta1'      = format(c( gam18_measPair$coefficients[2], gam19_measPair$coefficients[2],
+                           gam20_measPair$coefficients[2], gam21_measPair$coefficients[2], gamPOA_measPair$coefficients[2]),
                            digits = 4),
-                           'beta2'      = format(c( gam18_model$coefficients[3], gam19_model$coefficients[3],
-                           gam20_model$coefficients[3], gam21_model$coefficients[3], gamPOA_model$coefficients[3]),
+                           'beta2'      = format(c( gam18_measPair$coefficients[3], gam19_measPair$coefficients[3],
+                           gam20_measPair$coefficients[3], gam21_measPair$coefficients[3], gamPOA_measPair$coefficients[3]),
                            digits = 4),
-                           'beta3'      = format(c( gam18_model$coefficients[4], gam19_model$coefficients[4],
-                           gam20_model$coefficients[4], gam21_model$coefficients[4], gamPOA_model$coefficients[4]),
+                           'beta3'      = format(c( gam18_measPair$coefficients[4], gam19_measPair$coefficients[4],
+                           gam20_measPair$coefficients[4], gam21_measPair$coefficients[4], gamPOA_measPair$coefficients[4]),
                            digits = 4),
-                           'beta4'      = format(c( gam18_model$coefficients[5], gam19_model$coefficients[5],
-                           gam20_model$coefficients[5], gam21_model$coefficients[5], gamPOA_model$coefficients[5]),
+                           'beta4'      = format(c( gam18_measPair$coefficients[5], gam19_measPair$coefficients[5],
+                           gam20_measPair$coefficients[5], gam21_measPair$coefficients[5], gamPOA_measPair$coefficients[5]),
                            digits = 4),
                            'R2.adj'          = format(c(gam18_summary$r.sq, gam19_summary$r.sq, gam20_summary$r.sq,
                                                         gam21_summary$r.sq, gamPOA_summary$r.sq), digits = 4))
@@ -432,23 +432,23 @@ gam_stats %>%
 
 
 
-```{r gam_model_predict}
+```{r gam_measPair_predict}
 
 # Predicted values are for all stages in rating 21, which has the widest range of the ratings. Note that the predicted values are back-transformed into cubic feet per second from estimation in natural logs. 
 
-gam18_pred <- predict(gam18_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+gam18_pred <- predict(gam18_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
                        type = 'response')
 
-gam19_pred <- predict(gam19_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+gam19_pred <- predict(gam19_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
                        type = 'response')
 
-gam20_pred <- predict(gam20_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+gam20_pred <- predict(gam20_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
                        type = 'response')
 
-gam21_pred <- predict(gam21_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+gam21_pred <- predict(gam21_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
                        type = 'response')
 
-gamPOA_pred <- predict(gamPOA_model, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
+gamPOA_pred <- predict(gamPOA_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage), se.fit = TRUE,
                        type = 'response')
 
 
@@ -537,11 +537,11 @@ gam_long %>%
 # Store GAM parameters in a matrix for comparison
 gam_parameters <- matrix(NA, 5, 5)
 
-gam_parameters[,1] <- gam18_model$coefficients
-gam_parameters[,2] <- gam19_model$coefficients
-gam_parameters[,3] <- gam20_model$coefficients
-gam_parameters[,4] <- gam21_model$coefficients
-gam_parameters[,5] <- gamPOA_model$coefficients
+gam_parameters[,1] <- gam18_measPair$coefficients
+gam_parameters[,2] <- gam19_measPair$coefficients
+gam_parameters[,3] <- gam20_measPair$coefficients
+gam_parameters[,4] <- gam21_measPair$coefficients
+gam_parameters[,5] <- gamPOA_measPair$coefficients
 
 gam_parameters_df  <- as.data.frame( gam_parameters )
 
@@ -564,27 +564,27 @@ gam_parameters_df %>%
 
 # Basis functions use rating 21 because the stage range is the largest
 
-basis18 <- predict( gam18_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+basis18 <- predict( gam18_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
                                            type = 'lpmatrix')
 basis18_df <- data.frame(rep('18', nrow(rating21)), rating21$stage, basis18) 
 colnames(basis18_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', 'basis3', 'basis4')
                          
-basis19 <- predict( gam19_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+basis19 <- predict( gam19_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
                                            type = 'lpmatrix')
 basis19_df <- data.frame(rep('19', nrow(rating21)), rating21$stage, basis19)
 colnames(basis19_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', 'basis3', 'basis4')
 
-basis20 <- predict( gam20_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+basis20 <- predict( gam20_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
                                            type = 'lpmatrix')
 basis20_df <- data.frame(rep('20', nrow(rating21)), rating21$stage, basis20) 
 colnames(basis20_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', 'basis3', 'basis4')
 
-basis21 <- predict( gam21_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+basis21 <- predict( gam21_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
                                            type = 'lpmatrix')
 basis21_df <- data.frame(rep('21', nrow(rating21)), rating21$stage, basis21) 
 colnames(basis21_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', 'basis3', 'basis4')
 
-basisPOA   <- predict( gamPOA_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+basisPOA   <- predict( gamPOA_measPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
                                            type = 'lpmatrix')
 basisPOA_df <- data.frame(rep('POA', nrow(rating21)), rating21$stage, basisPOA) 
 colnames(basisPOA_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', 'basis3', 'basis4')
@@ -808,7 +808,7 @@ print(paste('The measurement vector is',
 
 # Zt is the time-varying design matrix in the measurement equation
 #   Zt contains the intercept and knot components for the spline from the GA model 
-# Zt <- t(predict( gam21_model, newdata = data.frame( stage_discrete_mea = 
+# Zt <- t(predict( gam21, newdata = data.frame( stage_discrete_mea = 
 #                  df_stage_flow_allDays$stage_daily_mean),
 #                  type = 'lpmatrix') )
 
@@ -837,7 +837,7 @@ X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1 )
 # Initial covariance of the state model
 V0 <- gam18_rating$Vp * 10
 # Change initial state variance to one based on data rather than rating curve  (Jan. 7, 2020)
-V0 <- gam18_model$Vp
+V0 <- gam18_dataPair$Vp
 # 
 # State variance matrix
 Q = 'diagonal and equal'
@@ -900,10 +900,11 @@ R = 'diagonal and equal'
 #                     kem_fit <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
 # kem_fit_QdiagEqual_RdiagEqual <- read_rds('kem_fit_Qdiag_Rscalar.rds')
 write_rds(marss_fit_QdiagEqual_RdiagEqual, path = 'marss_fit_QdiagEqual_RdiagEqual.rds')
-marss_fit <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
+
 
 # Specify model
-model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+# model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+marss_fit_QdiagEqual_RdiagEqual <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
 
 # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
 marss_fit  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
@@ -959,7 +960,7 @@ marss_kfss <- MARSSkf( marss_fit )
 ```{r set_marss_local_QdiagMulti_Rseries}
 
 
-# State variance matrix is based on the gam18_model$Vp
+# State variance matrix is based on the gam18_dataPair$Vp
 Q <- matrix(list('0.000128978*q',0,0,0,0,
                  0,'0.000666674*q',0,0,0  ,
                  0,0,'0.0004653482*q',0,0,
@@ -985,7 +986,7 @@ marss_fit  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace =
                  inits = coef(marss_fit_QdiagMulti_Rseries))
 
 marss_fit  <- MARSS(Yt, model = model.gen, method = 'kem', 
-                       control = list(maxit =  100, trace = 1, conv.test.slope.tol = 0.05), 
+                       control = list(maxit =  200, trace = 1, conv.test.slope.tol = 0.05), 
                  inits = coef(marss_fit))
 
 # saveRDS(kem_fit_test, file = 'kem_fit_QdiagMulti_Rseries.rds')
@@ -994,40 +995,7 @@ marss_kfss <- MARSSkf( marss_fit )
 
 ```
 
-```{r marss_estimate, eval = FALSE}
-## Model 1: Scalar Q and R
-R = 'diagonal and equal'
-
-# Specify model
-model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
-
-# Read previously estimated model to initialize parameters
-kem_fit_Qdiag_Rscalar <- read_rds( 'kem_fit_Qdiag_Rscalar.rds')
-
-# Refit model
-kem_fit_a <- MARSS(Yt, model = model.gen, control = list(maxit =  500),inits = coef(kem_fit_d))
-saveRDS(kem_fit_a, file = 'kem_fit_a.rds')
-kem_fit_b <- MARSS(Yt, model = model.gen, control = list(maxit = 1000),inits = coef(kem_fit_a))
-saveRDS(kem_fit_b, file = 'kem_fit_b.rds')
-kem_fit_c <- MARSS(Yt, model = model.gen, control = list(maxit = 2000),inits = coef(kem_fit_b))
-saveRDS(kem_fit_c, file = 'kem_fit_c.rds')
-kem_fit_d <- MARSS(Yt, model = model.gen, control = list(maxit = 4000),inits = coef(kem_fit_c))
-saveRDS(kem_fit_d, file = 'kem_fit_d.rds')
-kem_fit_QdiagMulti_Rseries <- readRDS('kem_fig_1g.rds')
-coef(kem_fit_d)
-
-kem_fit_Qdiag_Rscalar   <- kem_fit_c
-saveRDS(kem_fit_Qdiag_Rscalar, file = 'kem_fit_Qdiag_Rscalar.rds')
-kem_kfss_Qdiag_Rscalar  <- MARSSkfss(  kem_fit_Qdiag_Rscalar )
-
-## Model 2: Equal and diagonal Q, with time series R based on SE of flow qualifier 
-
-# Initialize measurement error vector with large variance for all days
-R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
-# Measurement variance specification
-#   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
-R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
-
+```{r R_variance_distribution}
 # Set up data frame to characterize measurement variances
 data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>% 
   ggplot( aes( x = measurement_variance)) +
@@ -1043,30 +1011,6 @@ data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>%
   labs( title = paste0('Figure ', fig_no, '. Frequency density of streamflow variance (R) series based on qualifiers'))
 
 
-
-# Specify model
-model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
-
-# Read previously estimated model 
-kem_fit_Qdiag_Rseries_SE <- read_rds( 'kem_fit_Qdiag_Rseries_SE.rds')
-
-# kem_fit_Qdiag_Rseries_SE re-estimation after removing bad stage days 1994-09-13 to 1994-09-19 
-kem_fit_1a <- MARSS(Yt, model = model.gen, control = list(maxit = 200))
-kem_fit_1b <- MARSS(Yt, model = model.gen, control = list(maxit = 500), inits = coef(kem_fit_1a))
-kem_fit_1c <- MARSS(Yt, model = model.gen, control = list(maxit = 1000), inits = coef(kem_fit_1b))
-kem_fit_1d <- MARSS(Yt, model = model.gen, control = list(maxit = 2000), inits = coef(kem_fit_1c))
-kem_fit_1e <- MARSS(Yt, model = model.gen, control = list(maxit = 2000), inits = as.numeric(coef(kem_fit_1d)['Q'])/2)
-kem_fit_1f <- MARSS(Yt, model = model.gen, control = list(maxit = 2000), inits = coef(kem_fit_1e))
-kem_fit_1g <- MARSS(Yt, model = model.gen, control = list(maxit = 2000), inits = coef(kem_fit_1f))
-saveRDS(kem_fit_1g, file = 'kem_fig_1g.rds')
-
-kem_fit_Qdiag_Rseries_SE <- kem_fit_a
-
-kem_fit_b <- MARSS(Yt, model = model.gen, control = list(maxit = 400),inits = coef(kem_fit_Qdiag_Rseries_SE))
-
-kem_fit_Qdiag_Rseries_SE <- kem_fit_b
-saveRDS(kem_fit_Qdiag_Rseries_SE, file = 'kem_fit_Qdiag_Rseries_SE.rds')
-
 ```
 
 
@@ -1076,37 +1020,41 @@ saveRDS(kem_fit_Qdiag_Rseries_SE, file = 'kem_fit_Qdiag_Rseries_SE.rds')
 
 ```{r state_space_compare}
 
-# MARSS results for process variance Q 'diagonal and equal' and R based on measurement variance R based on on time series of accuracy qualifiers of discrete measurements during period of record  
-kem_fit_Qdiag_Rscalar      <- read_rds( 'kem_fit_Qdiag_Rscalar.rds' )
+# MARSS results for process variance Q 'diagonal and equal' for alternative specifications for the measurement variance R
 
-kem_fit_Qdiag_Rseries_SE   <- read_rds( 'kem_fit_Qdiag_Rseries_SE.rds')
+#   R is 'diagonal and equal'
+marss_fit_QdiagEqual_RdiagEqual  <- read_rds('marss_fit_QdiagEqual_RdiagEqual.rds' )
 
-# kem_fit_Qdiag_Rseries      <- read_rds( 'kem_fit_Qdiag_Rseries.rds')
+#   R is based on the perceived measurement accuracy based on the qualifier: 
+#     Standard error was interpreted as equivalent to  SE of flows in natural log units.
+#     Excellant measurements were assigned a standard error of 0.02
+#     Good measurements were assigned a standard error of 0.05,
+#     Fair measurements were assigned a standard error of 0.08,
+#     Poor measurements were assigned a standard error of 0.15.
+marss_fit_QdiagEqual_Rseries     <- read_rds('marss_fit_QdiagEqual_Rseries.rds')
 
-kem_fit_QdiagMulti_Rseries <- read_rds('kem_fig_1g.rds')
-
-# kem_fit_Qdiag_Rscalar      <- read_rds('kem_fit_Qdiag_Rscalar.rds')
-
-
-# Set up table to compare models
+#   Q is diagonal and unequal variances based on gam18_rating, with equal multiplier
+#   R is based on teh perceived measurement quality, in percent
+marss_fit_QdiagMulti_Rseries     <- read_rds('marss_fit_QdiagMulti_Rseries.rds')
 
 
+# Set up data.frame to compare models
 marss_compare <- data.frame( Model = c('Q diagonal and equal, and R scalars estimated', 'Q diagonal and equal, R series specified', 
                                        'Q diagonal unequal multiplier, R series specified'), 
-                   'Q'              = format( c(kem_fit_Qdiag_Rscalar$par$Q,
-                                                kem_fit_Qdiag_Rseries_SE$par$Q,
-                                                kem_fit_QdiagMulti_Rseries$par$Q), digits = 4),
-                   'R'              = c(format(kem_fit_Qdiag_Rscalar$par$R, digits = 4),
-                                              'SE  Qualifier', 'SE  Qualifier'),
-                   'sqrt_R'         = c(format(sqrt(kem_fit_Qdiag_Rscalar$par$R), digits = 4),
-                                        format(sqrt(mean(kem_fit_Qdiag_Rseries_SE$marss$fixed$R[1,1,][ndx_ian])), digits = 4),
-                                        format(sqrt(mean(kem_fit_Qdiag_Rseries_SE$marss$fixed$R[1,1,][ndx_ian])), digits = 4)),
-                   'likelihood'     = format(c(kem_fit_Qdiag_Rscalar$logLik, 
-                                               kem_fit_Qdiag_Rseries_SE$logLik,
-                                               kem_fit_QdiagMulti_Rseries$logLik), digits = 4),
-                   'AICc'           = format(c(kem_fit_Qdiag_Rscalar$AICc,   
-                                               kem_fit_Qdiag_Rseries_SE$AICc,
-                                               kem_fit_QdiagMulti_Rseries$AICc), digits = 4))
+                   'Q'              = format( c(marss_fit_QdiagEqual_RdiagEqual$par$Q,
+                                                marss_fit_QdiagEqual_Rseries$par$Q,
+                                                marss_fit_QdiagMulti_Rseries$par$Q), digits = 4),
+                   'R'              = c(format(marss_fit_QdiagEqual_RdiagEqual$par$R, digits = 4),
+                                              'Meas_Qualifier', 'Meas_Qualifier'),
+                   'sqrt_R'         = c(format(sqrt(marss_fit_QdiagEqual_RdiagEqual$par$R), digits = 4),
+                                        format(sqrt(mean(marss_fit_QdiagEqual_Rseries$marss$fixed$R[1,1,][ndx_ian])), digits = 4),
+                                        format(sqrt(mean(marss_fit_QdiagMulti_Rseries$marss$fixed$R[1,1,][ndx_ian])), digits = 4)),
+                   'likelihood'     = format(c(marss_fit_QdiagEqual_RdiagEqual$logLik, 
+                                               marss_fit_QdiagEqual_Rseries$logLik,
+                                               marss_fit_QdiagMulti_Rseries$logLik), digits = 4),
+                   'AICc'           = format(c(marss_fit_QdiagEqual_RdiagEqual$AICc,   
+                                               marss_fit_QdiagEqual_Rseries$AICc,
+                                               marss_fit_QdiagMulti_Rseries$AICc), digits = 4))
                                                
                    
 marss_compare %>% 
@@ -1131,10 +1079,6 @@ marss_compare %>%
 
 Results of two model parameterizations are compared.  The first model estimated the process variance matrix Q as a time invariant 5 x 5 diagonal matrix with equal diagonal components and a time-varying scalar measurement variance R. The elements of R were based on the subject quality of the measurement as generally 'Good' with less then 5 percent error, and 'Fair' with an error of 
 
-
-## Conmpute standard errors of flow estimates
-
-
 ## Plot se flow
 
 ## GAM for stage_flow_day_19 meaurements
@@ -1144,13 +1088,13 @@ Results of two model parameterizations are compared.  The first model estimated 
 
 # Select model 2 for analysis
 # kem_fit   <- kem_fit_Qdiag_Rseries_SE
-kem_fit   <- kem_fit_QdiagMulti_Rseries
-kem_kfss  <- MARSSkf( kem_fit )
+marss_fit   <- marss_fit_QdiagMulti_Rseries
+marss_kf    <- MARSSkf( kem_fit )
   
 
-df_stage_flow_allDays$ytT    <- kem_fit$ytT[1, ]
+df_stage_flow_allDays$ytT    <- marss_fit$ytT[1, ]
 
-df_stage_flow_allDays$ytT.se <- kem_fit$ytT.se[, ]
+df_stage_flow_allDays$ytT.se <- marss_fit$ytT.se[, ]
 
 df_stage_flow_allDays <- addWaterYear(df_stage_flow_allDays)
 
@@ -1188,7 +1132,7 @@ df_stage_flow_allDays %>%
 
 
 # Design matrix for allDays
-gam_design_matrix_allDays <- predict( gam21_model, newdata = data.frame( stage_discrete_mea = 
+design_matrix_allDays <- predict( gam21_dataPair, newdata = data.frame( stage_discrete_mea = 
                                         df_stage_flow_allDays$stage_daily_mean), type = 'lpmatrix')
 
 kem_ytT <- rep(NA, length( df_stage_flow_allDays ))
@@ -1202,7 +1146,7 @@ for (i in 1:nrow( df_stage_flow_allDays )){
 
 # # # STARTING HERE # # #
 # Design matrix formed with Rating 21 because it has the widest range of stage (0.53 - 8.10 ft)
-design_matrix_rating <- predict( gam21_model,  newdata = data.frame( stage_discrete_mea = rating21$stage), 
+design_matrix_rating <- predict( gam21_dataPair,  newdata = data.frame( stage_discrete_mea = rating21$stage), 
                                  type = 'lpmatrix')
 
 # Design matrix for rating augmented with corresponding stage
@@ -1273,7 +1217,7 @@ tmp_df %>%
 
 ```{r rating_updates, fig.height = 18, fig.width = 10}
 
-Z <- predict( gam21_model, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+Z <- predict( gam21_dataPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
               type = 'lpmatrix')
 
 dim(Z)
