@@ -1,5 +1,5 @@
 ---
-title: "Dynamic Stage-Discharge Rating Estimation using a Regression Spline Embedded in a Kalman Filter"
+title: "Adaptive Stage-Discharge Rating Estimation using a Regression Spline Embedded in a Kalman Filter"
 author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
@@ -50,9 +50,10 @@ A stage-discharge rating is often used describe the relation between water-surfa
 
 A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
 
+
 ### Setup computational environment
 
-```{r setup, include=FALSE, echo = FALSE}
+```{r setup, include=FALSE}
 library( "rethinking" )
 options(mc.cores = parallel::detectCores())
 suppressPackageStartupMessages(library(dataRetrieval))
@@ -81,12 +82,12 @@ suppressPackageStartupMessages(library(gganimate))
 suppressPackageStartupMessages(library(gifski))
 # scales is used in density plot
 suppressPackageStartupMessages(library(scales))
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 ```
 
 ## Retrieve Streamgaging Site Inforamtion 
 
-```{r specify_gage}
+```{r specify_gage, echo = FALSE}
 
 # The starting and ending dates of the model
 #   Based on the beginning of unit stage date and endin on the first flow measurement of water year 2020
@@ -347,7 +348,7 @@ rating_long %>%
 
 Estimate Generalized Additive Models for each rating curve and for the POA
 
-```{r gam_dataPair_estimate}
+```{r gammeasPair_estimate}
 
 # discrete_meas_wt <- discrete_meas %>% 
 #   group_by( rating ) %>% 
@@ -831,13 +832,13 @@ U  <- 'zero'
 # Initial state vector from GA model
 X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1)
 # Change initial state vector to one based on data rather than the rating curve (Jan. 7, 2020)
-X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1 )
+# X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1 )
 
 
 # Initial covariance of the state model
 V0 <- gam18_rating$Vp * 10
 # Change initial state variance to one based on data rather than rating curve  (Jan. 7, 2020)
-V0 <- gam18_dataPair$Vp
+# V0 <- gam18_measPair$Vp
 # 
 # State variance matrix
 Q = 'diagonal and equal'
@@ -853,8 +854,8 @@ Q
 
 
 ```{r set_marss_global_parameters}
+
 # Yt is the measurement vector that contains directly measured flows (not daily means)
-#   stage_flow_day_19 as 1 x T matrix
 Yt <- matrix( log(df_stage_flow_allDays$flow_discrete_mea), nrow = 1)
 
 # Indexes for measured flows in vector
@@ -864,8 +865,7 @@ print(paste('The measurement vector is',
             format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 ),'percent NA values.'))
 
 
-Zt <- t(predict( gam18_rating, newdata = data.frame( stage = 
-                 df_stage_flow_allDays$stage_daily_mean),
+Zt <- t(predict( gam18_rating, newdata = data.frame( stage = df_stage_flow_allDays$stage_daily_mean),
                  type = 'lpmatrix') )
 
 # Remove row names
@@ -889,33 +889,24 @@ V0 <- gam18_rating$Vp * 10
 
 ```
 
-## Model kem_fit_QdiagEqual_RdiagEqual
+## Model marss_fit_QdiagEqual_RdiagEqual
 
 ```{r set_marss_local_QdiagEqual_RdiagEqual}
 
-# Specify Q and R matrix characteristics
-Q = 'diagonal and equal'
-R = 'diagonal and equal'
-
-#                     kem_fit <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
-# kem_fit_QdiagEqual_RdiagEqual <- read_rds('kem_fit_Qdiag_Rscalar.rds')
-write_rds(marss_fit_QdiagEqual_RdiagEqual, path = 'marss_fit_QdiagEqual_RdiagEqual.rds')
-
-
 # Specify model
-# model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
-marss_fit_QdiagEqual_RdiagEqual <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
-
-# Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-marss_fit  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
+if( file.exists('marss_fit_QdiagEqual_RdiagEqual.rds') ){
+  marss_fit_QdiagEqual_RdiagEqual <- read_rds('marss_fit_QdiagEqual_RdiagEqual.rds')
+} else{
+  Q = 'diagonal and equal'
+  R = 'diagonal and equal'
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_QdiagEqual_RdiagEqual  <- MARSS(Yt, model = model.gen, control = list(maxit =  5000, trace = 1), 
                  method = 'BFGS',
-                 inits = coef(marss_fit))
+                 inits = coef(marss_fit_QdiagEqual_RdiagEqual))
+  write_rds(marss_fit_QdiagEqual_RdiagEqual, path = 'marss_fit_QdiagEqual_RdiagEqual.rds')
+}
 
-
-write_rds(marss_fit, path = 'marss_fit_QdiagEqual_RdiagEqual.rds')
-
-
-marss_kfss <- MARSSkf( marss_fit )
 
 ```
 
@@ -923,32 +914,28 @@ marss_kfss <- MARSSkf( marss_fit )
 
 ```{r set_marss_local_QdiagEqual_Rseries}
 
-Q = 'diagonal and equal'
-# Initialize measurement error vector with large variance for all days
-R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
-# Measurement variance specification
-#   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
-R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
 
+if ( file.exists( 'marss_fit_QdiagEqual_Rseries.rds' )){
+  marss_fit_QdiagEqual_Rseries <- read_rds( 'marss_fit_QdiagEqual_Rseries.rds' )
+} else {
+  Q = 'diagonal and equal'
+  
+  # Initialize measurement error vector with large variance for all days
+  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+  # Measurement variance specification
+  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
+  
+  # Specify model
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_QdiagEqual_Rseries  <- MARSS(Yt, model = model.gen, method = 'kem',
+                                         control = list(maxit =  1000, trace = 1, conv.test.slope.tol = 0.05),
+                                         inits = coef(marss_fit_QdiagEqual_Rseries))
+  write_rds(marss_fit, path = 'marss_fit_QdiagEqual_Rseries.rds')
+}
 
-#                     kem_fit <- read_rds('kem_fit_QdiagEqual_RdiagEqual.rds')
-# kem_fit_QdiagEqual_RdiagEqual <- read_rds('kem_fit_Qdiag_Rscalar.rds')
-# write_rds(kem_fit_QdiagEqual_RdiagEqual, path = 'kem_fit_QdiagEqual_RdiagEqual.rds')
-# kem_fit <- read_rds('kem_fit_Qdiag_RSeries.rds')
-
-# Specify model
-model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
-
-# Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-marss_fit  <- MARSS(Yt, model = model.gen, method = 'kem',
-                  control = list(maxit =  100, trace = 1, conv.test.slope.tol = 0.05),
-                 inits = coef(marss_fit))
-
-
-write_rds(marss_fit, path = 'marss_fit_QdiagEqual_Rseries.rds')
-
-
-marss_kfss <- MARSSkf( marss_fit )
 
 ```
 
@@ -960,43 +947,44 @@ marss_kfss <- MARSSkf( marss_fit )
 ```{r set_marss_local_QdiagMulti_Rseries}
 
 
-# State variance matrix is based on the gam18_dataPair$Vp
-Q <- matrix(list('0.000128978*q',0,0,0,0,
-                 0,'0.000666674*q',0,0,0  ,
-                 0,0,'0.0004653482*q',0,0,
-                 0,0,0,'0.0008095793*q',0,
-                 0,0,0,0,'0.0011287121*q'), 5, 5)
-
-# Initialize measurement error vector with large variance for all days
-R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
-# Measurement variance specification
-#   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
-R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
-
- 
-
-marss_fit_QdiagMulti_Rseries <- read_rds('kem_fig_1g.rds')
-
-# Specify model
-model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
-
-# Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-marss_fit  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1, 
-                 conv.test.slope.tol = 0.05),
-                 inits = coef(marss_fit_QdiagMulti_Rseries))
-
-marss_fit  <- MARSS(Yt, model = model.gen, method = 'kem', 
-                       control = list(maxit =  200, trace = 1, conv.test.slope.tol = 0.05), 
-                 inits = coef(marss_fit))
-
-# saveRDS(kem_fit_test, file = 'kem_fit_QdiagMulti_Rseries.rds')
-
-marss_kfss <- MARSSkf( marss_fit )
+if( file.exists( 'marss_fit_QdiagMulti_Rseries.rds' )){
+  marss_fit_QdiagMulti_Rseries <- read_rds( 'marss_fit_QdiagMulti_Rseries.rds' )
+} else {
+  # State variance matrix is based on the gam18_measPair$Vp
+  Q <- matrix(list('0.000128978*q',0,0,0,0,
+                   0,'0.000666674*q',0,0,0  ,
+                   0,0,'0.0004653482*q',0,0,
+                   0,0,0,'0.0008095793*q',0,
+                   0,0,0,0,'0.0011287121*q'), 5, 5)
+  
+  # Initialize measurement error vector with large variance for all days
+  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+  # Measurement variance specification
+  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
+  
+  # Specify model
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_QdiagMulti_Rseries  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1, 
+                                                            conv.test.slope.tol = 0.05),
+                      inits = coef(marss_fit_QdiagMulti_Rseries))
+  
+  write_rds(marss_fit_QdiagMulti_Rseries, path = 'marss_fit_QdiagMulti_Rseries.rds')
+}
 
 ```
 
 ```{r R_variance_distribution}
 # Set up data frame to characterize measurement variances
+
+  # Initialize measurement error vector with large variance for all days
+  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+  # Measurement variance specification
+  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
+
 data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>% 
   ggplot( aes( x = measurement_variance)) +
   geom_bar( aes(y = (..count..)/sum(..count..)), fill = 'darkgreen', alpha = 0.50 ) + 
@@ -1009,7 +997,6 @@ data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>%
   xlab( 'Measurement variance, in decimal percent') +
   ylab( 'Probability density') +
   labs( title = paste0('Figure ', fig_no, '. Frequency density of streamflow variance (R) series based on qualifiers'))
-
 
 ```
 
@@ -1083,13 +1070,12 @@ Results of two model parameterizations are compared.  The first model estimated 
 
 ## GAM for stage_flow_day_19 meaurements
 
-```{r eval_state_space, echo = FALSE, fig.width = 12, fig.height = 16}
+```{r eval_state_space, fig.width = 12, fig.height = 20}
 
 
-# Select model 2 for analysis
-# kem_fit   <- kem_fit_Qdiag_Rseries_SE
+# Select model 3 for analysis
 marss_fit   <- marss_fit_QdiagMulti_Rseries
-marss_kf    <- MARSSkf( kem_fit )
+marss_kf    <- MARSSkf( marss_fit )
   
 
 df_stage_flow_allDays$ytT    <- marss_fit$ytT[1, ]
@@ -1109,7 +1095,8 @@ df_stage_flow_allDays %>%
   mutate( y_ice = pmin(flow_daily_pub, exp(ytT)) ) %>%  
   ggplot( aes( x = Date  )) +
   geom_line( aes( y = exp(ytT) ), color = 'red' ) +
-  geom_point(aes( y = flow_discrete_mea, color = qualifier), size = 1.5, color = 'darkblue' ) +
+  geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 ) +
+  geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  ) +
   geom_line( aes( y = exp(cl025) ), color = 'blue', size = 0.5) +
   geom_line( aes( y = exp(cl975) ), color = 'blue', size = 0.5) +
   geom_line(  aes( y = flow_daily_pub ), color = 'darkgreen', size = 0.7) +
@@ -1128,77 +1115,80 @@ df_stage_flow_allDays %>%
 ## Track Changes in Rating Curve Over Time
 
 
-```{r, fig.height = 9, fig.width = 9, eval = TRUE, echo = FALSE}
-
+```{r, fig.height = 9, fig.width = 9, eval = FALSE}
 
 # Design matrix for allDays
-design_matrix_allDays <- predict( gam21_dataPair, newdata = data.frame( stage_discrete_mea = 
-                                        df_stage_flow_allDays$stage_daily_mean), type = 'lpmatrix')
+design_matrix_allDays <- predict( gam18_rating, newdata = 
+                                  data.frame( stage =  df_stage_flow_allDays$stage_daily_mean), 
+                                  type = 'lpmatrix')
 
-kem_ytT <- rep(NA, length( df_stage_flow_allDays ))
+# Allocate vector for marss flows for all days
+marss_ytT_allDays <- rep(NA, length( df_stage_flow_allDays ))
 
-
+# Compute marss flow for all days
 for (i in 1:nrow( df_stage_flow_allDays )){
-  kem_ytT[i] <- design_matrix_allDays[ i, ] %*% matrix(kem_kfss$xtT[ , i], 5, 1)
+  marss_ytT_allDays[i] <- exp( design_matrix_allDays[ i, ] %*% matrix(marss_kf$xtT[ , i], 5, 1) )
 }
 
-# plot(kem_ytT, ytT, pch = 18, col = rgb(1,0,0, 0.2))
 
-# # # STARTING HERE # # #
 # Design matrix formed with Rating 21 because it has the widest range of stage (0.53 - 8.10 ft)
-design_matrix_rating <- predict( gam21_dataPair,  newdata = data.frame( stage_discrete_mea = rating21$stage), 
+design_matrix_rating <- predict( gam18_rating,  newdata = data.frame( stage = rating18$stage), 
                                  type = 'lpmatrix')
 
 # Design matrix for rating augmented with corresponding stage
-design_matrix_rating_aug <- cbind(rating21$stage, design_matrix_rating) 
-colnames(design_matrix_rating_aug)[1] <- 'stage'
+stage_design_matrix_rating <- cbind(rating18$stage, design_matrix_rating) 
+colnames(stage_design_matrix_rating)[1] <- 'stage'
 
 
 
-# Identify days of Discrete Flow Measurement (DFM)
+# Identify days of Discrete Flow Measurement (# # # DFM # # #)
 ndx_DFM <- which( !is.na( df_stage_flow_allDays$flow_discrete_mea ) )
 
 # Preallocate matrix to contain time-varying flows at times of dDscrete Flow Measurement (DFM)
-flow_rating_DFM <- matrix(NA, nrow = nrow(rating21), ncol = length( ndx_DFM ) )
-
+flow_rating_DFM <- matrix(NA, nrow = nrow(rating18), ncol = length( ndx_DFM ) )
 
 # design_matrix <- as.matrix(design_matrix_rating[,1:5])
 
 for (i in 1:length(ndx_DFM )){
-  flow_rating_DFM[ i ] <- exp( design_matrix_rating[i,] %*% matrix( kem_kfss$xtT[ , ndx_DFM[ i ]], 5, 1 ) )
+  flow_rating_DFM[ i ] <- exp( design_matrix_rating[i,] %*% matrix( marss_kf$xtT[ , ndx_DFM[ i ]], 5, 1 ) )
 }
 
 # design_matrix_rating_vec <- matrix( flow_xtT, ncol = 1, byrow = FALSE)
 
-tmp_df <- data.frame( Date     = rep(df_stage_flow_allDays$Date[ ndx_DFM ], each  = nrow(rating21)),
-                      stage    = rep(rating21$stage,                        times = length( ndx_DFM )),
-                      kem_flow = design_matrix_rating_vec )
+tmp_df <- data.frame( Date       = rep(df_stage_flow_allDays$Date[ ndx_DFM ], each  = nrow(   rating18)),
+                      stage      = rep(rating21$stage,                        times = length( ndx_DFM )),
+                      marss_flow = design_matrix_rating_vec )
 tmp_df <- tmp_df %>% addWaterYear()
 
 discrete_meas_allDays <- discrete_meas %>% 
   left_join( df_stage_flow_allDays, by = c('measurement_dt' = 'Date') )
 
-ndx_kfss <- which( df_stage_flow_allDays$Date %in% discrete_meas$Date )
-flow_xtT <- matrix(NA, nrow = nrow(rating21), ncol = length( ndx_kfss ) )
+# Find indices of allDays in which discrete flow measurements occurred
+ndx_allDays_measDays <- which( df_stage_flow_allDays$Date %in% discrete_meas$Date )
 
-design_matrix_rating_aug_matrix <- as.matrix(design_matrix_rating_aug[,2:6])
+# Setting up a matrix to compute the adaptive rating curve for all days of flow measurement
+# flow_xtT <- 
+adapt_rating <- matrix(NA, nrow = nrow(rating18), ncol = length( ndx_allDays_measDays ) )
+
+
+# design_matrix_rating_aug_matrix <- as.matrix(design_matrix_rating_aug[,2:6])
 
 for (i in 1:length( ndx_DFM )){
-  flow_xtT[ , i ] <- exp( design_matrix_rating_aug_matrix %*% matrix(kem_kfss$xtT[ 1:5, ndx_kfss[ i ]], 5, 1) )
+  adapt_rating[ , i ] <- exp( design_matrix_rating %*% matrix(marss_kf$xtT[ 1:5, ndx_allDays_measDays[ i ]], 5, 1) )
 }
 
 design_matrix_rating_vec <- matrix( flow_xtT, ncol = 1, byrow = TRUE)
 
 tmp_df <- data.frame( Date     = rep(df_stage_flow_allDays$Date[ndx_kfss], each = nrow(rating21)),
                       stage    = rep(rating21$stage, times = length(ndx_kfss)),
-                      kem_flow = design_matrix_rating_vec )
+                      marss_flow = design_matrix_rating_vec )
 tmp_df <- tmp_df %>% addWaterYear()
 
 
 tmp_df %>% 
   dplyr::filter( waterYear %in% c( 1990, 1995, 2000, 2005, 2010, 2015) ) %>%
-  ggplot( aes(x = kem_flow, y = stage, group = waterYear ), alpha = 0.25) +
-  geom_line(  aes( x = kem_flow, y = stage), size = 0.5, color = 'blue', alpha = 0.5) +
+  ggplot( aes(x = marss_flow, y = stage, group = waterYear ), alpha = 0.25) +
+  geom_line(  aes( x = marss_flow, y = stage), size = 0.5, color = 'blue', alpha = 0.5) +
   # geom_point( aes( x = discrete_meas$Date, y = discrete_meas$flow_discrete_mea, 
   #        ), color = 'blue') +
   labs(title = 'Date of Measurement:' ) + 
@@ -1215,14 +1205,14 @@ tmp_df %>%
 
 
 
-```{r rating_updates, fig.height = 18, fig.width = 10}
+```{r rating_updates, eval = FALSE, fig.height = 18, fig.width = 10}
 
-Z <- predict( gam21_dataPair, newdata = data.frame( stage_discrete_mea = rating21$stage ),
+Z <- predict( gam18_rating, newdata = data.frame( stage = rating18$stage ),
               type = 'lpmatrix')
 
 dim(Z)
 
-xtT_DFM <- kem_kfss$xtT[, ndx_DFM ]
+xtT_DFM <- marss_kf$xtT[, ndx_DFM ]
 
 dim( xtT_DFM )
 
