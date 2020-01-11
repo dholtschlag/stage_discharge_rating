@@ -901,7 +901,7 @@ R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
 #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
 R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
 
-
+ 
 
 kem_fit_QdiagMulti_Rseries <- read_rds('kem_fig_1g.rds')
 
