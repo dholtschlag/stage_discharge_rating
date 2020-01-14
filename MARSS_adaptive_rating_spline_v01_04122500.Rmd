@@ -137,6 +137,8 @@ site_info %>%
 
 
 ```
+Streamgage `r site_info$site_no` `site_info$station_nm` has a drainage area of `r site_info$ 
+
 ### Get rating period info and display
 
 ```{r rating_historyE, fig.height = 3}
@@ -145,8 +147,10 @@ site_info %>%
 rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
                             colClasses = c('numeric', 'Date', 'Date'), comment.char = '#')
 
+# Increment table counter
 tab_no <- tab_no + 1
 
+# Print table of starting and ending dates for selected rating periods
 rating_history %>% 
   kable( caption = paste0('Table ', tab_no, '. Streamflow Rating Curve History at ', 
                           site_info$site_no, site_info$station_nm )) %>% 
@@ -159,7 +163,7 @@ rating_history %>%
 
 Reads and plots rating curves 18, 19, 20, and 21 for streamgage 04122500 Pere Marquette River at Scottville, MI and plots the curves
 
-```{r read_ratings, echo = FALSE, warning = FALSE, message = FALSE}
+```{r read_ratings }
 
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
 #   provide detailed info on stage discharge
@@ -269,9 +273,12 @@ This code chunk:
 
 
 ```{r measurement_type_freq, echo = FALSE, message = FALSE}
+
+# Increment table counter
+tab_no <- tab_no + 1
 table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
   kable( digits = 4, 
-         caption = paste0('Table 1. Frequency of flow measurements by control type and measurement qualifiers at ',
+         caption = paste0('Table ', table_no, ',. Frequency of flow measurements by control type and measurement qualifiers at ',
          site_info$site_no, ' ', site_info$station_nm, 'from ', date_beg_model, ' to ', date_end_model)) %>%
   kable_styling() %>% 
   add_header_above(c("Type of Control", "Qualifier", 'Qualifier', "Qualifier", "Qualifier"))
@@ -287,6 +294,9 @@ discrete_meas <- discrete_meas %>%
 # Compute time between consequtive flow measurements
 df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_dt))
 
+# Increment figure counter
+fig_no <- fig_no + 1
+
 # Plot the probability density of days between measurements
 df %>% 
   ggplot( aes( x = days_between_measurements )) + 
@@ -295,7 +305,7 @@ df %>%
   geom_vline( xintercept = 46, color = 'black', linetype = 'dashed' ) +
   xlab( 'Time between flow measurements, in days' ) +
   ylab( 'Probability Density') +
-  labs( title = paste('Figure 2. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model) ) +
+  labs( title = paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model) ) +
   annotate('text', x = 40, y = 0.0265, label = '46')
   
   
@@ -311,12 +321,18 @@ discrete_meas <- discrete_meas %>%
       measurement_dt >= rating_history$start_date[ rating_history$rating_no == 20] ~ 21)
   )
 
+# Increment table counter
+tab_no <- tab_no + 1
+
+# Print table showing the number of discrete measurements by rating period
 discrete_meas %>% 
   rename( `Rating Period` = 'rating') %>% 
   group_by( `Rating Period` ) %>% 
   summarize( `Number of Measurements` = n()) %>% 
-  kable( caption = 'Number of discrete flow measurements during selected rating periods') %>% 
-  kable_styling( full_width = F)
+  kable( caption = paste0('Table ', tab_no, ' Number of discrete flow measurements during selected rating periods ') ) %>% 
+  kable_styling( full_width = F) %>% 
+  column_spec(1, width = '30em' ) %>% 
+  column_spec(2, width = '30em' )
 
 
 ```
@@ -326,6 +342,8 @@ Ths code chunk:
 
 ```{r plot_ratings_meas, fig.width = 9, fig.height = 8,}
 
+# Increment fig_no
+fig_no <- fig_no + 1
 
 rating_long %>% 
   ggplot( aes( x = rated_flow, y = stage,  color = rating_no)) +
@@ -350,14 +368,6 @@ Estimate Generalized Additive Models for each rating curve and for the POA
 
 ```{r gammeasPair_estimate}
 
-# discrete_meas_wt <- discrete_meas %>% 
-#   group_by( rating ) %>% 
-#   mutate( Mean = mean( flow_discrete_mea ),
-#           SD   =   sd( flow_discrete_mea ),
-#           Std  = (flow_discrete_mea - Mean)/ SD,
-#           wt   = abs(Std) / sum(abs(Std )))  %>% 
-#   ungroup( rating ) 
-  
 
 # Compute GAM model for each rating period
 knts = 5; # knts is the number of knots 
@@ -422,9 +432,11 @@ gam_stats <- data.frame('Model' = c('gam18', 'gam19', 'gam20', 'gam21', 'gamPOA'
                            digits = 4),
                            'R2.adj'          = format(c(gam18_summary$r.sq, gam19_summary$r.sq, gam20_summary$r.sq,
                                                         gam21_summary$r.sq, gamPOA_summary$r.sq), digits = 4))
+# Increment tab_no
+tab_no <- tab_no + 1
 
 gam_stats %>% 
-  kable( caption = 'Table 1. Summary statistics of five-knot cubic regression splines from Genearlized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).') %>% 
+  kable( caption = paste('Table', tab_no, '. Summary statistics of five-knot cubic regression splines from Genearlized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).' )) %>% 
   kable_styling() %>% 
   add_header_above( c(' ' = 3, 'Estimated Parameters' = 5, ' ' = 1 ) )
 
@@ -517,7 +529,11 @@ gam_long$flow_type[ndx_gam] <- 'gam_flow'
 ```
 
 
+
 ```{r plot_by_rating, fig.height = 10, fig.width = 10}
+
+fig_no <- fig_no + 1
+# Plot manual and gam estimates of each rating curve with corresponding discrete measurements
 gam_long %>% 
   ggplot( aes( x = flow_cfs, y = stage, color = flow_type )) +
   geom_line( aes( size = flow_type ), alpha = 0.25 ) +
@@ -529,31 +545,44 @@ gam_long %>%
   theme( legend.position = 'bottom') +
   geom_point( data = discrete_meas, 
               aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating), color = 'blue') +
-  labs( title = 'Comparison of manual and GAM ratings by rating number' ) +
   xlab( 'Flow, in cubic feet per second') +
-  ylab( 'Stage, in feet above gage datum')
+  ylab( 'Stage, in feet above gage datum') +
+  ggtitle( label = paste0('Figure ', fig_no, '. Comparison of rating curves created manually with generalized additive models for selected rating periods'))
   
   
 
 # Store GAM parameters in a matrix for comparison
-gam_parameters <- matrix(NA, 5, 5)
+gam_parameters <- matrix(NA, 5, 10)
 
-gam_parameters[,1] <- gam18_measPair$coefficients
-gam_parameters[,2] <- gam19_measPair$coefficients
-gam_parameters[,3] <- gam20_measPair$coefficients
-gam_parameters[,4] <- gam21_measPair$coefficients
-gam_parameters[,5] <- gamPOA_measPair$coefficients
+gam_parameters[ ,1] <- gam18_measPair$coefficients
+gam_parameters[ ,2] <- gam19_measPair$coefficients
+gam_parameters[ ,3] <- gam20_measPair$coefficients
+gam_parameters[ ,4] <- gam21_measPair$coefficients
+gam_parameters[ ,5] <- gamPOA_measPair$coefficients
+
+gam_parameters[ ,6] <- gam18_rating$coefficients
+gam_parameters[ ,7] <- gam19_rating$coefficients
+gam_parameters[ ,8] <- gam20_rating$coefficients
+gam_parameters[ ,9] <- gam21_rating$coefficients
+gam_parameters[,10] <- gamPOA_rating$coefficients
+
 
 gam_parameters_df  <- as.data.frame( gam_parameters )
 
-rownames( gam_parameters_df ) <- c('Knot 1', 'Knot 2', 'Knot 3', 'Knot 4', 'Knot 5')
+rownames( gam_parameters_df ) <- c('Knot 1', 'Knot 2', 'Knot 3', 'Knot 4', 'Knot 5',
+                                   'Knot 1', 'Knot 2', 'Knot 3', 'Knot 4', 'Knot 5')
 colnames( gam_parameters_df ) <- c('18', '19', '20', '21' , 'POA')
 
 
+tab_no <- tab_no + 1
+
+# Show gam model parameters for 
 gam_parameters_df %>% 
-  kable( caption = 'Table 3. Generalized Additive Model Parameters for each Spline Knot across Selected Rating Curve Numbers' ) %>% 
+  kable( caption = paste0('Table ', tab_no, '. Generalized Additive Model parameters for each spline knot for selected rating period.' )) %>% 
   kable_styling() %>% 
-  add_header_above( c('Spline' = 1, 'Rating Curve Number' = 5))
+  add_header_above( c('Spline' = 1, 'Rating Curve Number' = 5)) +
+  pack_rows('Generalized Additive Models based on discrete measurement data', 1, 5) %>% 
+  pack_rows('Generalized Additive Models estimated from stage-flow rating data', 6, 10 )
 
 
 ```
@@ -593,6 +622,8 @@ colnames(basisPOA_df) <- c('Rating', 'Stage', 'Intercept', 'basis1', 'basis2', '
 
 basis_df <- rbind(basis18_df, rbind(basis19_df, rbind(basis20_df, rbind(basis21_df, basisPOA_df))))
 
+fig_no <- fig_no + 1
+
 basis_df %>% 
   gather( key = 'Basis', value = 'Computed', basis1, basis2, basis3, basis4) %>% 
   mutate( Basis = factor(Basis, levels = c( 'basis1', 'basis2', 'basis3', 'basis4'))) %>% 
@@ -603,7 +634,8 @@ basis_df %>%
   facet_wrap(. ~ Basis, ncol = 2   ) +
   theme_bw() +
   theme( legend.position = 'bottom') +
-  ggtitle( 'Figure x. Basis functions of cubic spline for selected ratings 18 - 21')
+  ggtitle( paste0('Figure ', fig_no, '. Basis functions of cubic splines approximating selected ratings as a function of stage computed on the basis of discrete flow measurements'),
+           subtitle = 'Note: The basis0 equals 1 for all stages and was not included in the plots below' )
 
 
 ```
@@ -643,7 +675,7 @@ stage_day <- stage_unit %>%
 
 ```
 
-
+On some days during the period of analysis, multiple discrete measurements were made at `r station_no` 
 
 ```{r }
 
@@ -794,64 +826,6 @@ Note: A multiplicative form for the Q matrix can be specified as:
 This is provided just as a reminder of the format for defining Q with a multiplicative constant.
 Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
 
-```{r marss_define_fixed}
-
-# Yt is the measurement vector that contains directly measured flows (not daily means)
-#   stage_flow_day_19 as 1 x T matrix
-Yt <- matrix( log(df_stage_flow_allDays$flow_discrete_mea), nrow = 1)
-
-# Indexes for measured flows in vector
-ndx_ian_Yt <- which( !is.na(Yt) )
-
-print(paste('The measurement vector is', 
-            format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 ),'percent NA values.'))
-
-
-# Zt is the time-varying design matrix in the measurement equation
-#   Zt contains the intercept and knot components for the spline from the GA model 
-# Zt <- t(predict( gam21, newdata = data.frame( stage_discrete_mea = 
-#                  df_stage_flow_allDays$stage_daily_mean),
-#                  type = 'lpmatrix') )
-
-Zt <- t(predict( gam18_rating, newdata = data.frame( stage = 
-                 df_stage_flow_allDays$stage_daily_mean),
-                 type = 'lpmatrix') )
-
-# Remove row names
-rownames(Zt) <- NULL
-
-# Populate the Zt array in the format that MARSS expects
-Zt <- array(Zt, dim = c(1, knts, nrow(df_stage_flow_allDays)))
-
-# A is an unused time-varying vector in the measurement equation
-A  <- 'zero'
-
-# Drift vector
-U  <- 'zero'
-
-# Initial state vector from GA model
-X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1)
-# Change initial state vector to one based on data rather than the rating curve (Jan. 7, 2020)
-# X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1 )
-
-
-# Initial covariance of the state model
-V0 <- gam18_rating$Vp * 10
-# Change initial state variance to one based on data rather than rating curve  (Jan. 7, 2020)
-# V0 <- gam18_measPair$Vp
-# 
-# State variance matrix
-Q = 'diagonal and equal'
-
-Q <- matrix(list('0.000128978*q',0,0,0,0,
-                 0,'0.000666674*q',0,0,0  ,
-                 0,0,'0.0004653482*q',0,0,
-                 0,0,0,'0.0008095793*q',0,
-                 0,0,0,0,'0.0011287121*q'), 5, 5)
-
-Q
-```
-
 
 ```{r set_marss_global_parameters}
 
@@ -884,7 +858,7 @@ U  <- 'zero'
 X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1)
 
 # Initial covariance of the state model
-V0 <- gam18_rating$Vp * 10
+V0 <- gam18_rating$Vp * 1000
 
 
 ```
@@ -930,10 +904,10 @@ if ( file.exists( 'marss_fit_QdiagEqual_Rseries.rds' )){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-  marss_fit_QdiagEqual_Rseries  <- MARSS(Yt, model = model.gen, method = 'kem',
+  marss_fit_QdiagEqual_Rseries1  <- MARSS(Yt, model = model.gen, method = 'kem',
                                          control = list(maxit =  1000, trace = 1, conv.test.slope.tol = 0.05),
                                          inits = coef(marss_fit_QdiagEqual_Rseries))
-  write_rds(marss_fit, path = 'marss_fit_QdiagEqual_Rseries.rds')
+  write_rds(marss_fit_QdiagEqual_Rseries, path = 'marss_fit_QdiagEqual_Rseries.rds')
 }
 
 
@@ -976,7 +950,7 @@ if( file.exists( 'marss_fit_QdiagMulti_Rseries.rds' )){
 
 ```
 
-```{r R_variance_distribution}
+```{r R_variance_distribution, fig.height = 5}
 # Set up data frame to characterize measurement variances
 
   # Initialize measurement error vector with large variance for all days
@@ -1066,15 +1040,14 @@ marss_compare %>%
 
 Results of two model parameterizations are compared.  The first model estimated the process variance matrix Q as a time invariant 5 x 5 diagonal matrix with equal diagonal components and a time-varying scalar measurement variance R. The elements of R were based on the subject quality of the measurement as generally 'Good' with less then 5 percent error, and 'Fair' with an error of 
 
-## Plot se flow
-
-## GAM for stage_flow_day_19 meaurements
 
 ```{r eval_state_space, fig.width = 12, fig.height = 20}
 
 
 # Select model 3 for analysis
-marss_fit   <- marss_fit_QdiagMulti_Rseries
+# marss_fit   <- marss_fit_QdiagMulti_Rseries
+marss_fit   <- marss_fit_QdiagEqual_RdiagEqual
+# marss_fit    <- marss_fit_QdiagEqual_Rseries
 marss_kf    <- MARSSkf( marss_fit )
   
 
@@ -1107,58 +1080,90 @@ df_stage_flow_allDays %>%
   ylab( 'Daily mean streamflow, in cubic feet per second') +
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
-  ggtitle( 'Figure x. Daily mean streamflow estimated with spline model and historically published.',
-           subtitle = 'Large grey filled areas primarily show ice affects')
+  ggtitle( 'Figure x. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
+           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.')
 
 ```
 
-## Track Changes in Rating Curve Over Time
+## Plot Changes in the state parameters over time
 
 
-```{r, fig.height = 9, fig.width = 9, eval = FALSE}
+```{r, state_parameter_matrix, fig.height = 9, fig.width = 9 }
 
-# Design matrix for allDays
-design_matrix_allDays <- predict( gam18_rating, newdata = 
-                                  data.frame( stage =  df_stage_flow_allDays$stage_daily_mean), 
-                                  type = 'lpmatrix')
-
-# Allocate vector for marss flows for all days
-marss_ytT_allDays <- rep(NA, length( df_stage_flow_allDays ))
-
-# Compute marss flow for all days
-for (i in 1:nrow( df_stage_flow_allDays )){
-  marss_ytT_allDays[i] <- exp( design_matrix_allDays[ i, ] %*% matrix(marss_kf$xtT[ , i], 5, 1) )
-}
-
-
-# Design matrix formed with Rating 21 because it has the widest range of stage (0.53 - 8.10 ft)
-design_matrix_rating <- predict( gam18_rating,  newdata = data.frame( stage = rating18$stage), 
-                                 type = 'lpmatrix')
-
-# Design matrix for rating augmented with corresponding stage
-stage_design_matrix_rating <- cbind(rating18$stage, design_matrix_rating) 
-colnames(stage_design_matrix_rating)[1] <- 'stage'
-
-
+# marss_state_tT is the estimate of the state at time t given all time T
+marss_state_tT           <- data.frame( t(as.matrix( marss_kf$xtT, ncol = 5, nrow = 10966)))
+marss_state_tT$Date      <- flow_daily_pub$Date
+colnames(marss_state_tT) <- c('x1 (b0)', 'x2 (b1)', 'x3 (b2)', 'x4 (b3)', 'x5 (b4)', 'Date')
 
 # Identify days of Discrete Flow Measurement (# # # DFM # # #)
 ndx_DFM <- which( !is.na( df_stage_flow_allDays$flow_discrete_mea ) )
 
+
+marss_state_tT %>% 
+  gather( key = 'Parameter', value = 'Estimate', -Date) %>% 
+  ggplot( aes( x = Date, y = Estimate, group = Parameter )) +
+  geom_line() +
+  geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_DFM ], color = 'lightblue' ) +
+  theme_bw() +
+  xlab( 'Date') + 
+  ylab( 'State Estimates') +
+  theme( legend.position = 'bottom') +
+  facet_wrap( ncol = 1, Parameter ~ ., scales = 'free' ) +
+  ggtitle( 'Figure xx. Daily estimates of the state vector as parameters of the corresponding basis functions.',
+           subtitle = 'Vertical lines indicate dates of discrete flow measurements.')
+
+
+
+```
+
+
+
+```{r adaptive_rating, fig.height = 16, fig.width = 9}
+# Design matrix for allDays
+# design_matrix_allDays <- predict( gam18_rating, newdata = 
+#                                   data.frame( stage =  df_stage_flow_allDays$stage_daily_mean), 
+#                                   type = 'lpmatrix')
+# 
+# # Allocate vector for marss flows for all days
+# marss_ytT_allDays <- rep(NA, length( df_stage_flow_allDays ))
+# 
+# # Compute marss flow for all days
+# for (i in 1:nrow( df_stage_flow_allDays )){
+#   marss_ytT_allDays[i] <- exp( design_matrix_allDays[ i, ] %*% matrix(marss_kf$xtT[ , i], 5, 1) )
+# }
+# 
+
+# Design matrix formed with from Rating 18 basis functions using the stage range in Rating 21
+#   The range in stage is the widest range of stage (0.53 - 8.10 ft)
+design_matrix_rating <- predict( gam18_rating,  newdata = data.frame( stage = rating21$stage), 
+                                 type = 'lpmatrix')
+
+
+
+# Design matrix for rating augmented with corresponding stage
+stage_design_matrix_rating <- cbind(rating21$stage, design_matrix_rating) 
+colnames(stage_design_matrix_rating)[1] <- 'stage'
+
+
+
+
 # Preallocate matrix to contain time-varying flows at times of dDscrete Flow Measurement (DFM)
-flow_rating_DFM <- matrix(NA, nrow = nrow(rating18), ncol = length( ndx_DFM ) )
+flow_rating_DFM <- matrix(NA, nrow = nrow(rating21), ncol = length( ndx_DFM ) )
 
 # design_matrix <- as.matrix(design_matrix_rating[,1:5])
 
 for (i in 1:length(ndx_DFM )){
-  flow_rating_DFM[ i ] <- exp( design_matrix_rating[i,] %*% matrix( marss_kf$xtT[ , ndx_DFM[ i ]], 5, 1 ) )
+  flow_rating_DFM[ , i ] <- exp( design_matrix_rating %*% matrix( marss_kf$xtT[ , ndx_DFM[ i ]], 5, 1 ) )
 }
 
-# design_matrix_rating_vec <- matrix( flow_xtT, ncol = 1, byrow = FALSE)
 
-tmp_df <- data.frame( Date       = rep(df_stage_flow_allDays$Date[ ndx_DFM ], each  = nrow(   rating18)),
-                      stage      = rep(rating21$stage,                        times = length( ndx_DFM )),
-                      marss_flow = design_matrix_rating_vec )
-tmp_df <- tmp_df %>% addWaterYear()
+flow_rating_DFM_vec <- matrix( flow_rating_DFM, ncol = 1, byrow = FALSE)
+
+adaptive_rating_measDays <- data.frame( Date       = rep(df_stage_flow_allDays$Date[ ndx_DFM ], each  = nrow(   rating21)),
+                                        stage      = rep(rating21$stage,                        times = length( ndx_DFM )),
+                      marss_flow = flow_rating_DFM_vec )
+adaptive_rating_measDays <- adaptive_rating_measDays %>% addWaterYear()
+
 
 discrete_meas_allDays <- discrete_meas %>% 
   left_join( df_stage_flow_allDays, by = c('measurement_dt' = 'Date') )
@@ -1166,47 +1171,38 @@ discrete_meas_allDays <- discrete_meas %>%
 # Find indices of allDays in which discrete flow measurements occurred
 ndx_allDays_measDays <- which( df_stage_flow_allDays$Date %in% discrete_meas$Date )
 
-# Setting up a matrix to compute the adaptive rating curve for all days of flow measurement
-# flow_xtT <- 
-adapt_rating <- matrix(NA, nrow = nrow(rating18), ncol = length( ndx_allDays_measDays ) )
+
+tmp <- df_discrete_meas %>%
+  mutate( Date = measurement_dt ) %>% 
+  addWaterYear() %>% 
+  filter( waterYear %in% sel_yr)
 
 
-# design_matrix_rating_aug_matrix <- as.matrix(design_matrix_rating_aug[,2:6])
-
-for (i in 1:length( ndx_DFM )){
-  adapt_rating[ , i ] <- exp( design_matrix_rating %*% matrix(marss_kf$xtT[ 1:5, ndx_allDays_measDays[ i ]], 5, 1) )
-}
-
-design_matrix_rating_vec <- matrix( flow_xtT, ncol = 1, byrow = TRUE)
-
-tmp_df <- data.frame( Date     = rep(df_stage_flow_allDays$Date[ndx_kfss], each = nrow(rating21)),
-                      stage    = rep(rating21$stage, times = length(ndx_kfss)),
-                      marss_flow = design_matrix_rating_vec )
-tmp_df <- tmp_df %>% addWaterYear()
-
-
-tmp_df %>% 
-  dplyr::filter( waterYear %in% c( 1990, 1995, 2000, 2005, 2010, 2015) ) %>%
+adaptive_rating_measDays %>% 
+  dplyr::filter( waterYear %in% sel_yr) %>%
+  arrange( marss_flow ) %>% 
   ggplot( aes(x = marss_flow, y = stage, group = waterYear ), alpha = 0.25) +
-  geom_line(  aes( x = marss_flow, y = stage), size = 0.5, color = 'blue', alpha = 0.5) +
+  geom_line(  aes( x = marss_flow, y = stage), size = 0.25, color = 'blue', alpha = 0.5) +
   # geom_point( aes( x = discrete_meas$Date, y = discrete_meas$flow_discrete_mea, 
   #        ), color = 'blue') +
   labs(title = 'Date of Measurement:' ) + 
   theme_bw() +
-  facet_wrap( ~ waterYear, ncol = 3) +
+  facet_wrap( ~ waterYear, ncol = 2) +
   theme( legend.position = 'right') +
   xlab( 'Streamflow, in cubic feet per second' ) +
   ylab( 'Stage, in feet above gage datum' ) + 
   labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
-  geom_line( data = rating18, aes( x = rated18_flow, y = stage, group = NULL), color = 'red', size = 1 ) +
-  geom_line( data = rating21, aes( x = rated21_flow, y = stage, group = NULL), color = 'forestgreen', size = 1 )
+  geom_line( data = rating18, aes( x = rated18_flow, y = stage, group = NULL), color = 'red', size = 0.5 ) +
+  geom_line( data = rating21, aes( x = rated21_flow, y = stage, group = NULL), color = 'forestgreen', size = 0.5 ) +
+  geom_point( data = tmp, aes( x = flow_discrete_mea, y = stage_discrete_mea, color = factor(waterYear))) +
+  theme( legend.position = 'bottom')
 
 ```
 
 
 
 ```{r rating_updates, eval = FALSE, fig.height = 18, fig.width = 10}
-
+N
 Z <- predict( gam18_rating, newdata = data.frame( stage = rating18$stage ),
               type = 'lpmatrix')
 
