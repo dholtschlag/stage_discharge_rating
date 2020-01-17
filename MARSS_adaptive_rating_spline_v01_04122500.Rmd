@@ -1,59 +1,33 @@
 ---
-title: "Adaptive Stage-Discharge Rating Estimation using a Regression Spline Embedded in a Kalman Filter"
+title: "A State-Space Model for Adaptive Stage-Discharge Rating Estimation using Discrete Flow Measurements"
 author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
   html_document:
+    theme: paper
   always_allow_html: yes
 bibliography: bibliography.bib
 ---
 
 ## Abstract
 
-A dynamic estimation approach is described to track persistent changes in the relation between water-surface elevations (stages) and streamflow discharges (flows) on the basis of periodic discrete measurements of stage and flow. In this paper, an existing stage-discharge rating is automatically fit by use of a regression spline. The parameters of the regression spline form the state vector within a Kalman filter.  The state vector is premultiplied by the design vector in the measurement equation to estimate flow on days of  measurement. Discrepancies between the measured flow and estimated flow are used to update the state vector and reduce the state uncertainty.   Temporal updates to the state vector occur 
+An adaptive stage-discharge estimation approach is developed to track persistent changes in the relation between water-surface elevations (stages) and streamflow discharges (flows). The approach updates parameters of a cubic spline regression function describing the stage-flow relation using data from periodic discrete flow measurements. The spline parameters form the state vector of a state-space model, while the measurement vector contains the discrete flow measurements. The state-space model is solved iteratively using a Kalman filter. In addition, the Kalman filter can be used to compute the magnitudes and uncertainties of daily or unit flows. The approach is illustrated using daily data from U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich. Once the state-space model estimated, however, the model can be applied at regular unit (less than daily time intervals) time steps by a simple adjustment of the process variance in the state equation. Persistent or long-term changes in the stage-flow relation can be tracked with this univariate model.  Extension of this model to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate approach that is beyond the scope of this model. 
 
 ## Background
 
-Stage-flow (stage-discharge) relations describe a monotonically increasing relation between stage and flow at a streamgage, and is commonly applied where flow is not affected by variable backwater conditions. This relation is developed and maintained on the basis of continued discrete, contemporaneous measurements of stage and flow that span the typical range of flow conditions at the streamgage. 
+The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 active streamgages throughout the United States. Streamgages measure flow from the upstream basin, which is generally topographically defined.  Computations are commonly based on continual measurements of stage at 10- to 60-minute intervals. The stage data is used to compute corresponding values of flow based on a empirical relation between stage and flow commonly referred to as a rating curve or table. The rating describes a monotonically increasing relation between stage and flow. This rating is developed and maintained on the basis of discrete, contemporaneous measurements of stage and flow that span the typical range of flow conditions at the streamgage. 
 
-The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank hydraulic characteristics, or to episodic changes, such as increased backwater associated with aquatic plant growth or ice formation. Once the source of the episodic changes are no longer a factor, the stage-flow relation reverts to nominal conditions, or to the contemoraneous level of the persistent changes at the streamgage.  
+The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank hydraulic characteristics, or change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer a factor, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  
 
-This report develops an automated approach to tracking persistent changes in stage-flow relations based on continued discrete-flow measurements at an individual streamgage. Tracking episodic changes requires an multivariate analysis of flow in a stream network that is beyond the scope of this paper. Episodic changes can occur simultaneously with and potentially confound the analysis of persistent chnages, so both approaches will likely be needed.  
+The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the measurement frequency. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of days to weeks during periods when no discrete flow measurements occur. The frequency of discrete flow measurements is constrained by the cost of field visits. 
 
-## Streamgage Site and Streamflow Record Characteristics  
+### Scope
 
+This paper develops an automated approach for tracking persistent changes in stage-flow relations using on-going discrete-flow measurements and continually updated stage data. Given that discrete flow measurement commonly occur at about 6-week intervals, persistent changes must exist for several months to be detected by the proposed methodology. Tracking intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
 
-## Methods for Developing a Spline Regression of the Relation between Stage and Flow
-
-Spline regression 
-
-[NOTE: Plot basis functions for model or perhaps all four]
-
-
-
-
-## Methods for Adapting the Spine Regression Parameters with Information from Discrete Measurements 
-
-
-$$
-\begin{align}
-    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
-    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
-    \text{}
-\end{align}
-$$
-
-
-
-
-A stage-discharge rating is often used describe the relation between water-surface elevations (stages) and streamflow discharges (flows).  The rating commonly varies with time due to changes in the hydraulic properties of the stream channel, contracted opennings, and 
-
-A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
-
-
-### Setup computational environment
 
 ```{r setup, include=FALSE}
+# Libraries needed in the analysis are loaded here
 # library( "rethinking" )
 # options(mc.cores = parallel::detectCores())
 suppressPackageStartupMessages(library(dataRetrieval))
@@ -83,13 +57,15 @@ suppressPackageStartupMessages(library(gifski))
 # scales is used in density plot
 suppressPackageStartupMessages(library(scales))
 suppressPackageStartupMessages(library(ggmap))
+suppressPackageStartupMessages(library(ggsn))
 suppressPackageStartupMessages(library(sf))
+suppressPackageStartupMessages(library(usmap))
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
-## Retrieve Streamgaging Site Inforamtion 
 
-```{r specify_gage, echo = FALSE}
+
+```{r specify_gage, echo = FALSE, results = 'hide' }
 
 # The starting and ending dates of the model
 #   Based on the beginning of unit stage date and endin on the first flow measurement of water year 2020
@@ -107,10 +83,10 @@ site_no    <- '04122500'
 site_file  <- paste0('site_', site_no, '.RData')
 
 if( file.exists(site_file)){
-  print(paste('Loading site_info for', site_no, 'from RData file.'))
+  # print(paste('Loading site_info for', site_no, 'from RData file.'))
   load(site_file)
 } else {
-  print(paste('Retrieving site_info for', site_no, 'from NWIS' ))
+  # print(paste('Retrieving site_info for', site_no, 'from NWIS' ))
   site_info  <- readNWISsite(site_no)
 
   # Standardize field names
@@ -122,10 +98,9 @@ if( file.exists(site_file)){
 
 ```
 
-### Streamgage Attributes
 
 
-```{r show_site_info, fig.height = 2}
+```{r show_site_info, fig.height = 2, warning = 'hide', results = 'hide', eval = FALSE }
 
 site_info %>% 
   rename( drain_area_mi2 = drain_area_va,
@@ -139,22 +114,24 @@ site_info %>%
 
 
 ```
-Streamgage `r site_info$site_no` `site_info$station_nm` has a drainage area of `r site_info$ 
+### Study Area
+
+USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (Fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The basin has a drainage area of 681 mi^2^ at the streamgage. The basin is largely forested and includes parts of the Huron-Manistee National Forest. Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020). The streamflow rating is commonly ice-affected during the winter months.
 
 
 
-```{r register_key, echo = FALSE, fig.height = 7, fig.width = 7}
+```{r register_key, echo = FALSE,  results = 'hide', message = 'hide', warning = 'hide'}
 
 # this sets your google map for this session
 # Read google key from file
-google_key <- read_file('maps/google_key.txt')
+# google_key <- read_file('maps/google_key.txt')
 
 # Register the key and delete it following registry
-register_google(key = google_key)
-rm('google_key')
+# register_google(key = google_key)
+# rm('google_key')
 
 # check if key is saved
-has_google_key()
+# has_google_key()
 
 # Set up bounding box for map
 
@@ -163,28 +140,79 @@ has_google_key()
 # 
 # write_rds(site_map, path = "C:/Home/projects/spline_rating_curves/stage_discharge_rating/maps/site_map")
 
-map <- read_rds(path = "C:/Home/projects/spline_rating_curves/stage_discharge_rating/maps/site_map")
+suppressMessages(map <- read_rds(path = "C:/Home/projects/spline_rating_curves/stage_discharge_rating/maps/site_map"))
 
-watershed    <- st_read("C:/Home/ws_012/fhwa_flood_regions/gis/shapefiles/04122500.shp")
+invisible(watershed    <- st_read("C:/Home/ws_012/fhwa_flood_regions/gis/shapefiles/04122500.shp"))
 watershed_df <- data.frame( lon = st_coordinates(watershed)[,1],
-                            lat = st_coordinates(watershed)[,2]) 
+                           lat = st_coordinates(watershed)[,2]) 
+```
 
-map %>% 
+
+```{r plot_site_map, fig.height = 7, fig.width = 7, message = FALSE, warning = 'hide' }
+fig_no <- fig_no + 1
+
+# Site map with streamgage and drainage basin shown
+vicinity <- map %>% 
   ggmap() +
   geom_point( data = data.frame( lon = site_info$dec_long_va, lat = site_info$dec_lat_va),
               aes( x = lon, y = lat), color = 'red', size = 3) +
   geom_polygon( data = watershed_df, aes( x = lon, y = lat), color = 'lightgrey', alpha = 0.15 ) +
   xlab( 'Longitude' ) + 
   ylab( 'Latitude') +
+  scalebar(x.min = -86.95622, x.max = -85.29841, y.min =  43.40782, y.max =  44.5, 
+           transform = TRUE, dist_unit = 'mi', dist = 10, location = 'bottomleft',
+           model = "GRS80", height = 0.02, st.size = 3, st.dist = .015,
+           border.size = 1, box.fill = c('black', 'white')) +
   annotate('text', x = -85.88, y = 43.85, label = 'Pere Marquette Basin' ) +
   annotate('text', x = -86.28, y = 43.99, label = '04122500') +
-  ggtitle( paste0('Figure ', fig_no, '. U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich. and drainage basin'))
+  ggtitle( paste0('Figure ', fig_no, '. U.S. Geological Survey streamgage 04122500 Pere Marquette \nRiver at Scottville, Mich. and drainage basin'))
+
+mi_map <- map_data('state')
+
+mi_inset <-mi_map %>% 
+  dplyr::filter( region == 'michigan') %>% 
+  ggplot( aes( x = long, y = lat, group = group)) +
+  geom_polygon( fill = 'black') +
+  geom_point( data = data.frame( long = site_info$dec_long_va, lat = site_info$dec_lat_va),
+              aes( x = long, y = lat, group = NA), color = 'red', size = 2) + 
+  xlab('') +
+  ylab('')
+
+
+vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4, 
+                                                      ymin =  44.25, ymax =  44.55)
 
 
 ```
 
 
 
+
+### Streamgage Site and Streamflow Record Characteristics  
+
+
+
+## Methods for Developing an Adaptive Stage-Flow Rating
+
+
+### Spline-Regression Model
+
+A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
+
+Spline regression 
+
+
+
+### State-Space Model
+
+
+$$
+\begin{align}
+    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
+    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+    \text{}
+\end{align}
+$$
 
 ### Get rating period info and display
 
@@ -384,7 +412,7 @@ discrete_meas %>%
 
 ```
 
-Ths code chunk:
+Th code chunk:
 1. Plots the active ratings during the POA and shows corresponding discrete flow measurement pairs 
 
 ```{r plot_ratings_meas, fig.width = 9, fig.height = 8,}
@@ -496,7 +524,7 @@ gam_stats <- data.frame('Model' = c('gam18', 'gam19', 'gam20', 'gam21', 'gamPOA'
 tab_no <- tab_no + 1
 
 gam_stats %>% 
-  kable( caption = paste('Table', tab_no, '. Summary statistics of five-knot cubic regression splines from Genearlized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).' )) %>% 
+  kable( caption = paste('Table', tab_no, '. Summary statistics of five-knot cubic regression splines from Generalized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).' )) %>% 
   kable_styling() %>% 
   add_header_above( c(' ' = 3, 'Estimated Parameters' = 5, ' ' = 1 ) )
 
@@ -878,7 +906,7 @@ df_stage_flow_allDays %>%
 ## Initial state space model
 Yt is measured flow referenced to the day of measurement during the period when rating 19 was active. Most values are NA
 Xt is the 10 x 1 state vector of GAM parameters used to approximate rating 19
-Q  is the fixed 10X10 covariance matrix of paramaters
+Q  is the fixed 10X10 covariance matrix of parameters
 R  is an estimated constant measurement variance
 Zt is the matrix of fixed measurement components 
 Yt is sequential daily values of log_stage_round 
@@ -945,6 +973,8 @@ if( file.exists('marss_fit_QdiagEqual_RdiagEqual.rds') ){
 
 
 ```
+
+
 ```{r set_marss_local_QdiagEqual_RdiagSpecify}
 
 # Specify model
@@ -998,6 +1028,8 @@ if ( file.exists( 'marss_fit_QdiagEqual_Rseries.rds' )){
 
 
 ```
+
+
 
 
 ## Model kem_fit_QdiagMulti_Rseries
