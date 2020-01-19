@@ -11,7 +11,7 @@ bibliography: bibliography.bib
 
 ## Abstract
 
-An adaptive stage-discharge estimation approach is developed to track persistent changes in the relation between water-surface elevations (stages) and streamflow discharges (flows). The approach updates parameters of a cubic spline regression function describing the stage-flow relation using data from periodic discrete flow measurements. The spline parameters form the state vector of a state-space model, while the measurement vector contains the discrete flow measurements. The state-space model is solved iteratively using a Kalman filter. In addition, the Kalman filter can be used to compute the magnitudes and uncertainties of daily or unit flows. The approach is illustrated using daily data from U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich. Once the state-space model estimated, however, the model can be applied at regular unit (less than daily time intervals) time steps by a simple adjustment of the process variance in the state equation. Persistent or long-term changes in the stage-flow relation can be tracked with this univariate model.  Extension of this model to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate approach that is beyond the scope of this model. 
+An adaptive stage-discharge estimation approach is developed to track persistent changes in the relation between water-surface elevations (stages) and streamflow discharges (flows). The approach updates parameters of a cubic spline regression function describing the stage-flow relation using data from periodic discrete flow measurements. The spline parameters form the state vector of a state-space model, while the measurement vector contains the discrete flow measurements. The state-space model is solved iteratively using a Kalman filter. The approach is illustrated using daily data from U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich. Results show the adaptation of a stage-flow relation consistent with rating 18 (applied at the streamgage from 1986-1994), to a relation consistent with rating 21 (applied at the streamgage from 2013-2019), based on 188 discrete flow measurements during the intervening period. In addition, the Kalman filter is used to compute the magnitudes and uncertainties of daily flows at the streamgage for selected years. Once the state-space model estimated from daily values, however, the model can be applied at regular unit (less than daily time intervals) time steps by a simple adjustment of the process variance in the state equation. Persistent or long-term changes in the stage-flow relation can be tracked with this univariate model.  Extension of this model to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate approach involving a streamflow network that is beyond the scope of this model. 
 
 ## Background
 
@@ -28,8 +28,8 @@ This paper develops an automated approach for tracking persistent changes in sta
 
 ```{r setup, include=FALSE}
 # Libraries needed in the analysis are loaded here
-# library( "rethinking" )
-# options(mc.cores = parallel::detectCores())
+library( "rethinking" )
+options(mc.cores = parallel::detectCores())
 suppressPackageStartupMessages(library(dataRetrieval))
 suppressPackageStartupMessages(library(lubridate))
 suppressPackageStartupMessages(library(tidyverse))
@@ -60,6 +60,7 @@ suppressPackageStartupMessages(library(ggmap))
 suppressPackageStartupMessages(library(ggsn))
 suppressPackageStartupMessages(library(sf))
 suppressPackageStartupMessages(library(usmap))
+suppressPackageStartupMessages(library(FAdist))
 knitr::opts_chunk$set(echo = FALSE)
 ```
 
@@ -116,7 +117,7 @@ site_info %>%
 ```
 ### Study Area
 
-USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (Fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The basin has a drainage area of 681 mi^2^ at the streamgage. The basin is largely forested and includes parts of the Huron-Manistee National Forest. Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020). The streamflow rating is commonly ice-affected during the winter months.
+USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The basin has a drainage area of 681 mi^2^ at the streamgage. The basin is heavily forested and includes parts of the Huron-Manistee National Forest. Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020). The streamflow rating is commonly ice-affected during the winter months.
 
 
 
@@ -186,108 +187,79 @@ vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4,
 ```
 
 
+### Data Characteristics
 
-
-### Streamgage Site and Streamflow Record Characteristics  
-
-
-
-## Methods for Developing an Adaptive Stage-Flow Rating
-
-
-### Spline-Regression Model
-
-A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
-
-Spline regression 
+Daily mean streamflow data for the Pere Marquette River were obtained for the period of record using the USGS National Water Information System (NWIS) by use of the R package 'dataRetrieval' [@DeCicco2019]. Some of the earlier ancillary data used in computing daily mean flows, however, is only available from archived paper records. In particular, unit stage data and discrete flow measurement data are generally available for Pere Marquette River in electronic format since `r format(date_beg_model, '%b %d, %Y')`. The most recent data used in the analysis was `r format(date_beg_model, '%b %d, %Y')`. In this paper, the period of electronic data availability is referred to as the period of analysis (POA). Data summaries presented in the following sections are restricted to this period.
 
 
 
-### State-Space Model
+```{r pub_daily_flow}
+# Load daily flows to estimate missing daily mean stage 
+if( file.exists('flow_daily_pub.RData')){
+  # print('Loading published daily_means from RData file.')
+  load('flow_daily_pub.RData')
+} else {
+  # print('Retrieving daily flow from NWIS')
+  flow_daily_pub <- readNWISdv( site_no, parameterCd = '00060', startDate = date_beg_model,
+                             endDate = date_end_model)
+  # Standardize names
+  flow_daily_pub <- renameNWISColumns( flow_daily_pub )
+  save(flow_daily_pub, file = 'flow_daily_pub.RData')
+}
 
+flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
-$$
-\begin{align}
-    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
-    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
-    \text{}
-\end{align}
-$$
-
-### Get rating period info and display
-
-```{r rating_historyE, fig.height = 3}
-
-# Read rating history
-rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
-                            colClasses = c('numeric', 'Date', 'Date'), comment.char = '#')
-
-# Increment table counter
-tab_no <- tab_no + 1
-
-# Print table of starting and ending dates for selected rating periods
-rating_history %>% 
-  kable( caption = paste0('Table ', tab_no, '. Streamflow Rating Curve History at ', 
-                          site_info$site_no, site_info$station_nm )) %>% 
-                          kable_styling( full_width = FALSE )
-  
 ```
 
+***
 
-### Retrieve Stage-Flow Ratings
-
-Reads and plots rating curves 18, 19, 20, and 21 for streamgage 04122500 Pere Marquette River at Scottville, MI and plots the curves
-
-```{r read_ratings }
-
-# Rating curve at the selected site.  The 'exsa' parameter is an extended table
-#   provide detailed info on stage discharge
-
-rating18 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
-colnames( rating18 ) <- c('rated_flow', 'stage')
-
-# Use rating18 as the initial rating
-rating_init   <- rating18
-#   Rename column rated18_flow to rated_flow_init
-colnames(rating_init)[1] <- 'rated_flow_init'
-
-rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
-colnames( rating19 ) <- c('rated_flow', 'stage')
-
-rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
-colnames( rating20 ) <- c('rated_flow', 'stage')
-
-rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
-colnames( rating21 ) <- c('rated_flow', 'stage')
+> Probability Distribution Daily Flows
 
 
-rating_wide <- rating18   %>%  
-  full_join(   rating19 ) %>% 
-  full_join(   rating20 ) %>% 
-  full_join(   rating21 ) %>% 
-  dplyr::select(stage, everything() )
-  
-rating_long <- rbind(rating18, rbind(rating19, rbind(rating20, rating21)))
-rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)), 
-                           rep(20, nrow(rating20)), rep(21, nrow(rating21)))
+Daily mean flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]`, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The natural logarithm of flows were consistent with a three parameter gamma distribution (fig. 2). 
+
+```{r prob_den_flow}
+# Estimate parameters for lgamma3
+gam3_parm <- fitdist(log(flow_daily_pub$Flow), 'gamma3', start = list(shape = 1, scale = 1, thres = 1),
+        upper = c(Inf, Inf, min(log(flow_daily_pub$Flow))))
+
+gam3_seq <- seq(gam3_parm$estimate[3], max(log(flow_daily_pub$Flow)), by = 0.02)
+gam3_den <- dgamma3(gam3_seq, shape = gam3_parm$estimate[1],
+                    scale = gam3_parm$estimate[2], thres = gam3_parm$estimate[3])
+gam3_df  <- data.frame(gam3_seq, gam3_den)
+
+
+fig_no <- fig_no + 1
+
+# Plot the empirical density of log(Flow) with theoretical GAMMA3 Density 
+flow_daily_pub %>% 
+  ggplot( aes( log(Flow ))) +
+  geom_density( fill = 'lightgrey', alpha = 0.5 ) +
+  theme_bw() +
+  # scale_x_continuous(breaks = seq(0, 5000, 1000), limits = c(0, 5000) ) + 
+  # geom_vline( xintercept =  min(flow_daily_pub$Flow)) +
+  geom_line( data = gam3_df, aes( x = gam3_seq, y = gam3_den), color = 'red' ) +
+  xlab('Natural log of Flow, in cubic feet per second') +
+  ylab('Probability density') +
+  annotate('text', x = 7.40, y = 1.15, label = 'Theoretical Density: Gamma Distribution ', color = 'red', size = 3.8) +
+  annotate('text', x = 7.65, y = 1.09, label = paste0('dgamma3( shape = ', format( gam3_parm$estimate[1], digits = 4),
+                                    ', scale = ', format( gam3_parm$estimate[2], digits = 4),
+                                    ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
+  annotate('segment', x = 6.54, y = 1.13, xend = 6.675, yend = 1.15, color = 'red' ) +
+  annotate('text', x = 6.5, y = 0.3, label = 'Empirical Density' ) +
+  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \nScottville, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) )
 
 ```
 
 
-### Retrieve Discrete Stage-Flow Measurement 
-
-This code chuck:
-1. Loads discrete measurements from a file, if the file exists.  Otherwise, the data are retrieved from NWIS. 
-2. Variable names are standardized.
-3. Filtering operations are applied to limit data to the Period of Analysis (POA), creates an ordered factor variable for measurement accuracy quantifiers, and add the water year variable.
 
 ```{r read_discrete_meas_stage_flow, echo = FALSE}
 
 if( file.exists('discrete_meas.RData')){
-  print('Loading published daily_means from RData file.')
+  # print('Loading discrete flow measurement data from RData file.')
   load('discrete_meas.RData')
 } else {
-  print('Retrieving daily flow from NWIS')
+  # print('Retrieving daily flow from NWIS')
   discrete_meas   <- readNWISmeas(site_no, expanded = TRUE, convertType = TRUE)
   # Standardize field names
   discrete_meas  <- renameNWISColumns(discrete_meas)
@@ -339,24 +311,38 @@ discrete_meas <- discrete_meas %>%
 discrete_meas <- discrete_meas[complete.cases(discrete_meas$stage_discrete_mea, discrete_meas$flow_discrete_mea),]
 ```
 
-This code chunk:
-1. Tables frequencies of flow measurements by type of control and accuracy qualifiers
-2. Excludes measurements where the control is ice cover,
-3. Computes the probability density of times between measurements,
-4. Associates discrete flow measurements with the rating curve used during the period,
-5. Tables the measurements by their rating period
+***
+
+> Discrete Flow Measurement Hydraulic Controls and Accuracy Qualifiers
+
+Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` tabulates discrete measurements by the type of control and the measurement qualifier. The most common hydraulic control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
 
 
+The qualifiers assigned to discrete flow measurements were used to estimate uncertainties of the measured flows.  A qualifier of 'Excellent' was associated with a standard error of 2 percent; 'Good,' with a standard error of 5 percent; 'Fair,' with a standard error of 8 percent; and 'Poor,' with a standard error of 12-percent. The associations are loosely based on the 'Discharge Measurement Quality Code' descriptions by USGS NWIS at https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code, accessed Jan. 18, 2020.   
+  
 ```{r measurement_type_freq, echo = FALSE, message = FALSE}
 
 # Increment table counter
 tab_no <- tab_no + 1
 table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
+  rbind(c(sum(discrete_meas$qualifier == 'Excelent'),
+          sum(discrete_meas$qualifier == 'Good'),
+          sum(discrete_meas$qualifier == 'Fair'), 
+          sum(discrete_meas$qualifier == 'Poor'))) %>% 
+  cbind(c(sum(discrete_meas$control_type == 'Clear Channel'),
+          sum(discrete_meas$control_type == 'Light Vegetation'),
+          sum(discrete_meas$control_type == 'Light Debris'),
+          sum(discrete_meas$control_type == 'Shore Ice'),
+          sum(discrete_meas$control_type == 'Moderate Debris'),
+          sum(discrete_meas$control_type == 'Ice Cover'),
+          nrow(discrete_meas))) %>% 
   kable( digits = 4, 
-         caption = paste0('Table ', tab_no, ',. Frequency of flow measurements by control type and measurement qualifiers at ',
-         site_info$site_no, ' ', site_info$station_nm, 'from ', date_beg_model, ' to ', date_end_model)) %>%
+         caption = paste0('Table ', tab_no, '. Frequency of flow measurements by stream channel control type and flow measurement qualifiers at ',
+         site_info$site_no, ' ', site_info$station_nm, 'from ', date_beg_model, ' to ', date_end_model),
+         col.names = c( 'Excellent', 'Good', 'Fair', 'Poor', 'Total') ) %>%
   kable_styling() %>% 
-  add_header_above(c("Type of Control", "Qualifier", 'Qualifier', "Qualifier", "Qualifier"))
+  add_header_above(c("Type of Control" = 1, "Discrete Flow Measurement Qualifier" = 4, ' '), align = 'center') %>% 
+  footnote('Discrete measurements with the type of control "Ice Cover" were subsequently deleted from the analysis because they did not reflect persistent changes. Also, check measurements, which are repeated flow measurements on the same day to confirm the accuracy of the initially measured flow, were made on two days during the period of analysis. An average flow was computed from the two measurements to represent the discrete flow on that day.')
 
 # Remove ice cover measurements
 discrete_meas <- discrete_meas %>% 
@@ -365,25 +351,49 @@ discrete_meas <- discrete_meas %>%
                  'stage_discrete_mea', 'flow_discrete_mea', 'qualifier',  'control_type',
                  'se_pct', 'se_flow' )
 
-
 # Compute time between consequtive flow measurements
-df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_dt))
+df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_dt, 1))
+```
+
+***
+
+> Time Between Discrete Flow Measurements  
+
+The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 1)`.   
+
+
+```{r days_between_meas, messages = FALSE, warning = FALSE }
 
 # Increment figure counter
 fig_no <- fig_no + 1
 
 # Plot the probability density of days between measurements
 df %>% 
-  ggplot( aes( x = days_between_measurements )) + 
-  geom_density( fill = 'blue', alpha = 0.25 ) +
+  ggplot( aes( x = as.numeric(days_between_measurements) )) + 
+  geom_histogram( fill = 'black', alpha = 0.50, binwidth = 5 ) +
   theme_bw() +
-  geom_vline( xintercept = 46, color = 'black', linetype = 'dashed' ) +
+  geom_vline( xintercept = mean(df$days_between_measurements), color = 'blue', linetype = 'dashed' ) +
   xlab( 'Time between flow measurements, in days' ) +
   ylab( 'Probability Density') +
-  labs( title = paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model) ) +
-  annotate('text', x = 40, y = 0.0265, label = '46')
-  
-  
+  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
+          subtitle = 'Bin widths include 5 days.') +
+  annotate('text', x = 52, y = 25.5, label = 'Mean', hjust = -1, vjust = 0, color = 'blue')
+
+```
+
+***
+
+> Historical Rating Curves 
+
+
+Get rating period info and display
+
+```{r rating_history, }
+
+# Read rating history
+rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
+                            colClasses = c('numeric', 'Date', 'Date'), comment.char = '#')
+
 # Identify rating period for each discrete measurement 
 discrete_meas <- discrete_meas %>% 
   mutate(
@@ -400,20 +410,67 @@ discrete_meas <- discrete_meas %>%
 tab_no <- tab_no + 1
 
 # Print table showing the number of discrete measurements by rating period
-discrete_meas %>% 
-  rename( `Rating Period` = 'rating') %>% 
-  group_by( `Rating Period` ) %>% 
-  summarize( `Number of Measurements` = n()) %>% 
-  kable( caption = paste0('Table ', tab_no, ' Number of discrete flow measurements during selected rating periods ') ) %>% 
+suppressMessages(tmp <- discrete_meas %>% 
+  rename( 'rating_no' = 'rating') %>% 
+  group_by( rating_no ) %>% 
+  summarize( no_meas = n()) %>% 
+  left_join( rating_history ) %>% 
+  dplyr::select(rating_no, start_date, end_date, no_meas))
+
+tmp %>% 
+  kable( caption = paste0('Table ', tab_no, ' Number of discrete flow measurements during selected rating periods '),
+         col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of Measurements')) %>% 
   kable_styling( full_width = F) %>% 
-  column_spec(1, width = '30em' ) %>% 
-  column_spec(2, width = '30em' )
+  column_spec(1, width = '6em' ) %>% 
+  column_spec(4, width = '7em' )
 
 
 ```
 
-Th code chunk:
-1. Plots the active ratings during the POA and shows corresponding discrete flow measurement pairs 
+***
+
+> Plot Historical Stage-Flow Ratings
+
+
+```{r read_ratings, results = 'hide' }
+
+# Rating curve at the selected site.  The 'exsa' parameter is an extended table
+#   provide detailed info on stage discharge
+
+rating18 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
+colnames( rating18 ) <- c('rated_flow', 'stage')
+
+# Use rating18 as the initial rating
+rating_init   <- rating18
+#   Rename column rated18_flow to rated_flow_init
+colnames(rating_init)[1] <- 'rated_flow_init'
+
+rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
+colnames( rating19 ) <- c('rated_flow', 'stage')
+
+rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
+colnames( rating20 ) <- c('rated_flow', 'stage')
+
+rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
+colnames( rating21 ) <- c('rated_flow', 'stage')
+
+
+suppressMessages(rating_wide <- rating18   %>%  
+  full_join(   rating19 ) %>% 
+  full_join(   rating20 ) %>% 
+  full_join(   rating21 ) %>% 
+  dplyr::select(stage, everything() ))
+  
+rating_long <- rbind(rating18, rbind(rating19, rbind(rating20, rating21)))
+rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)), 
+                           rep(20, nrow(rating20)), rep(21, nrow(rating21)))
+
+```
+
+***
+
+Figure `r fig_no + 1` shows historical rating curves 18-21 and corresponding discrete flow measurements during the selected rating periods.  A persistent shift to the right is evident in the plot indicating higher rates of flow are discharge at the same stage. The historical rating curves were developed manually.  
+
 
 ```{r plot_ratings_meas, fig.width = 9, fig.height = 8,}
 
@@ -434,10 +491,48 @@ rating_long %>%
   ylab( 'Stage, in feet above gage datum' ) +
   annotate('text', x = c(1300, 1950, 3200, 5200), y = c( 4.0, 4.7, 6.0, 7.0), 
            label = c('18', '19', '20', '21')) +
-  labs( title =  paste0('Figure ', fig_no, '. Discrete flow measurements for selected rating curves at ', site_info$site_no, ' ', site_info$station_nm ) )
+  labs( title =  paste0('Figure ', fig_no, '. Discrete flow measurements for selected rating curves at ', site_info$site_no, '\n', site_info$station_nm ) )
 
   
 ```
+
+
+
+
+## Methods for Adapting Stage-Flow Rating to Sequential Discrete Flow Measurements
+
+
+### Spline-Regression Model
+
+A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
+
+Spline regression 
+
+
+
+### State-Space Model
+
+
+$$
+\begin{align}
+    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
+    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+    \text{}
+\end{align}
+$$
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 Estimate Generalized Additive Models for each rating curve and for the POA
 
@@ -809,21 +904,6 @@ df_stage_flow_allDays <-df_stage_flow_allDays %>%
 
 ```{r missing_stage}
 
-# Load daily flows to estimate missing daily mean stage 
-if( file.exists('flow_daily_pub.RData')){
-  print('Loading published daily_means from RData file.')
-  load('flow_daily_pub.RData')
-} else {
-  print('Retrieving daily flow from NWIS')
-  flow_daily_pub <- readNWISdv( site_no, parameterCd = '00060', startDate = date_beg_model,
-                             endDate = date_end_model)
-  # Standardize names
-  flow_daily_pub <- renameNWISColumns( flow_daily_pub )
-  save(flow_daily_pub, file = 'flow_daily_pub.RData')
-}
-
-
-
 
 df_stage_flow_allDays <- df_stage_flow_allDays %>% 
   left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date')) %>% 
@@ -888,17 +968,43 @@ ndx_stage <- which( as.Date(stage_unit$dateTime) == as.Date('1992-07-22') )
 df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage_discrete_mea[ ndx_ian ]
 
 
-# Replot with missing values estimated
-df_stage_flow_allDays %>% 
-  ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
-  geom_point( aes( color = stage_miss ), alpha = 0.5 ) +
+# # Replot with missing values estimated
+# df_stage_flow_allDays %>% 
+#   ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
+#   geom_point( aes( color = stage_miss ), alpha = 0.5 ) +
+#   theme_bw() +
+#   scale_x_log10( breaks = seq(1, 6, by = 1) ) +
+#   scale_y_log10( breaks = seq(1, 6, by = 1) ) +
+#   geom_abline( intercept = 0, slope = 1, color = 'green4') +
+#   xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
+#   ylab('Daily mean stage on days of discrete measurements, in feet') +
+#   ggtitle('Figure 9. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.')
+
+```
+
+```{r R_variance_distribution, fig.height = 5}
+# Set up data frame to characterize measurement variances
+
+ndx_ian_Yt <- which(!is.na(df_stage_flow_allDays$flow_discrete_mea) )
+
+  # Initialize measurement error vector with large variance for all days
+  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+  # Measurement variance specification
+  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
+
+data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>% 
+  ggplot( aes( x = measurement_variance)) +
+  geom_bar( aes(y = (..count..)/sum(..count..)), fill = 'darkgreen', alpha = 0.50 ) + 
+  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), 
+            stat = "count", vjust = -0.25) +
+  scale_x_log10( limits = c(1e-3, 5e-2), breaks = c( 0.05^2, 0.08^2, 0.12^2, 0.03) ) +
+  scale_y_continuous( labels = scales::percent, limits = c(0, 1) ) +
+  geom_vline( xintercept = 300) +
   theme_bw() +
-  scale_x_log10( breaks = seq(1, 6, by = 1) ) +
-  scale_y_log10( breaks = seq(1, 6, by = 1) ) +
-  geom_abline( intercept = 0, slope = 1, color = 'green4') +
-  xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
-  ylab('Daily mean stage on days of discrete measurements, in feet') +
-  ggtitle('Figure 9. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.')
+  xlab( 'Measurement variance based on qualifer of discrete flow measurement') +
+  ylab( 'Probability density') +
+  labs( title = paste0('Figure ', fig_no, '. Frequency density of streamflow measurement variance (R) series based on qualifiers'))
 
 ```
 
@@ -923,7 +1029,7 @@ Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
 Yt <- matrix( log(df_stage_flow_allDays$flow_discrete_mea), nrow = 1)
 
 # Indexes for measured flows in vector
-ndx_ian_Yt <- which( !is.na(Yt) )
+# ndx_ian_Yt <- which( !is.na(Yt) )
 
 print(paste('The measurement vector is', 
             format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 ),'percent NA values.'))
@@ -955,7 +1061,7 @@ V0 <- gam18_rating$Vp * 1000
 
 ## Model marss_fit_QdiagEqual_RdiagEqual
 
-```{r set_marss_local_QdiagEqual_RdiagEqual}
+```{r marss_QdiagEqual_RdiagEqual}
 
 # Specify model
 if( file.exists('marss_fit_QdiagEqual_RdiagEqual.rds') ){
@@ -975,7 +1081,7 @@ if( file.exists('marss_fit_QdiagEqual_RdiagEqual.rds') ){
 ```
 
 
-```{r set_marss_local_QdiagEqual_RdiagSpecify}
+```{r marss_QdiagEqual_RdiagSpecify}
 
 # Specify model
 if( file.exists('marss_fit_QdiagEqual_RdiagSpecify.rds') ){
@@ -998,6 +1104,71 @@ if( file.exists('marss_fit_QdiagEqual_RdiagSpecify.rds') ){
 
 ```
 
+
+## Model kem_fit_QdiagUnequal_Restimate
+
+```{r marss_QdiagUnequal_RdiagEqual}
+
+# Standardize the diagonal of gam18_rating for estimation
+#  These standardized variance terms average 1 and form the diagonal of Q
+# gam18_diag_std <- diag(gam18_rating$Vp)/mean(diag(gam18_rating$Vp))
+
+if( file.exists( 'marss_fit_QdiagUnequal_RdiagEqual.rds' )){
+  marss_fit_QdiagUnequal_RdiagEqual <- read_rds( 'marss_fit_QdiagUnequal_RdiagEqual.rds' )
+} else {
+  # State variance matrix is based on the gam18_measPair$Vp
+  Q <- matrix(list('0.1166336*q',0,0,0,0,
+                   0,'1.3179593*q',0,0,0  ,
+                   0,0,'0.6810473*q',0,0,
+                   0,0,0,'1.0737010*q',0,
+                   0,0,0,0,'1.8106588*q'), 5, 5)
+  
+  # R is estimated
+  R  <- 'diagonal and equal'
+  
+  # Specify model
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_QdiagUnequal_RdiagEqual  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
+                                                            method = 'BFGS')
+  
+  write_rds(marss_fit_QdiagUnequal_RdiagEqual, path = 'marss_fit_QdiagUnequal_RdiagEqual.rds')
+}
+```
+
+
+## Model kem_fit_QdiagUnequal_RdiagSpecify
+
+```{r marss_QdiagUnequal_RdiagSpecify}
+
+# Standardize the diagonal of gam18_rating for estimation
+#  These standardized variance terms average 1 and form the diagonal of Q
+# gam18_diag_std <- diag(gam18_rating$Vp)/mean(diag(gam18_rating$Vp))
+
+if( file.exists( 'marss_fit_QdiagUnequal_RdiagSpecify.rds' )){
+  marss_fit_QdiagUnequal_RdiagSpecify <- read_rds( 'marss_fit_QdiagUnequal_RdiagSpecify.rds' )
+} else {
+  # State variance matrix is based on the gam18_measPair$Vp
+  Q <- matrix(list('0.1166336*q',0,0,0,0,
+                   0,'1.3179593*q',0,0,0  ,
+                   0,0,'0.6810473*q',0,0,
+                   0,0,0,'1.0737010*q',0,
+                   0,0,0,0,'1.8106588*q'), 5, 5)
+  
+  # R is specified by qualifiers of discrete flow measurement
+  R  <- matrix(mean( (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2),1,1)
+  
+  # Specify model
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_QdiagUnequal_RdiagSpecify  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
+                                                            method = 'BFGS')
+  
+  write_rds(marss_fit_QdiagUnequal_RdiagSpecify, path = 'marss_fit_QdiagUnequal_RdiagSpecify.rds')
+}
+```
 
 ## Model kem_fit_QdiagEqual_RSeries
 
@@ -1030,22 +1201,23 @@ if ( file.exists( 'marss_fit_QdiagEqual_Rseries.rds' )){
 ```
 
 
+## Model marss_fit_QdiagUnequal_Rseries
 
+```{r set_marss_local_QdiagUnequal_Rseries}
 
-## Model kem_fit_QdiagMulti_Rseries
+# Standardize the diagonal of gam18_rating for estimation
 
-```{r set_marss_local_QdiagMulti_Rseries}
+gam18_diag_std <- diag(gam18_rating$Vp)/mean(diag(gam18_rating$Vp))
 
-
-if( file.exists( 'marss_fit_QdiagMulti_Rseries.rds' )){
-  marss_fit_QdiagMulti_Rseries <- read_rds( 'marss_fit_QdiagMulti_Rseries.rds' )
+if( file.exists( 'marss_fit_QdiagUnequal_Rseries.rds' )){
+  marss_fit_QdiagUnequal_Rseries <- read_rds( 'marss_fit_QdiagUnequal_Rseries.rds' )
 } else {
   # State variance matrix is based on the gam18_measPair$Vp
-  Q <- matrix(list('0.000128978*q',0,0,0,0,
-                   0,'0.000666674*q',0,0,0  ,
-                   0,0,'0.0004653482*q',0,0,
-                   0,0,0,'0.0008095793*q',0,
-                   0,0,0,0,'0.0011287121*q'), 5, 5)
+  Q <- matrix(list('0.1166336*q',0,0,0,0,
+                   0,'1.3179593*q',0,0,0  ,
+                   0,0,'0.6810473*q',0,0,
+                   0,0,0,'1.0737010*q',0,
+                   0,0,0,0,'1.8106588*q'), 5, 5)
   
   # Initialize measurement error vector with large variance for all days
   R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
@@ -1057,38 +1229,15 @@ if( file.exists( 'marss_fit_QdiagMulti_Rseries.rds' )){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-  marss_fit_QdiagMulti_Rseries  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1, 
-                                                            conv.test.slope.tol = 0.05),
-                      inits = coef(marss_fit_QdiagMulti_Rseries))
+  marss_fit_QdiagUnequal_Rseries  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1, 
+                                                            conv.test.slope.tol = 0.05), method = 'kem',
+                      inits = coef(marss_fit_QdiagUnequal_Rseries))
   
-  write_rds(marss_fit_QdiagMulti_Rseries, path = 'marss_fit_QdiagMulti_Rseries.rds')
+  write_rds(marss_fit_QdiagUnequal_Rseries, path = 'marss_fit_QdiagUnequal_Rseries.rds')
 }
 
 ```
 
-```{r R_variance_distribution, fig.height = 5}
-# Set up data frame to characterize measurement variances
-
-  # Initialize measurement error vector with large variance for all days
-  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
-  # Measurement variance specification
-  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
-  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
-
-data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>% 
-  ggplot( aes( x = measurement_variance)) +
-  geom_bar( aes(y = (..count..)/sum(..count..)), fill = 'darkgreen', alpha = 0.50 ) + 
-  geom_text(aes(y = ((..count..)/sum(..count..)), label = scales::percent((..count..)/sum(..count..))), 
-            stat = "count", vjust = -0.25) +
-  scale_x_log10( limits = c(1e-3, 5e-2), breaks = c( 0.05^2, 0.08^2, 0.12^2, 0.03) ) +
-  scale_y_continuous( labels = scales::percent, limits = c(0, 1) ) +
-  geom_vline( xintercept = 300) +
-  theme_bw() +
-  xlab( 'Measurement variance, in decimal percent') +
-  ylab( 'Probability density') +
-  labs( title = paste0('Figure ', fig_no, '. Frequency density of streamflow variance (R) series based on qualifiers'))
-
-```
 
 
 ## State-Space Estimation
@@ -1106,6 +1255,23 @@ marss_fit_QdiagEqual_RdiagEqual   <- read_rds('marss_fit_QdiagEqual_RdiagEqual.r
 #     Standard error was interpreted as equivalent to  SE of flows in natural log units.
 marss_fit_QdiagEqual_RdiagSpecify <- read_rds('marss_fit_QdiagEqual_RdiagSpecify.rds')
 
+# State variance matrix is based on the gam18_measPair$Vp
+  # Q <- matrix(list('0.1166336*q',0,0,0,0,
+  #                  0,'1.3179593*q',0,0,0  ,
+  #                  0,0,'0.6810473*q',0,0,
+  #                  0,0,0,'1.0737010*q',0,
+  #                  0,0,0,0,'1.8106588*q'), 5, 5)
+  # 
+  # R is estimated
+  # R  <- 'diagonal and equal'
+marss_fit_QdiagUnequal_RdiagEqual <- read_rds('marss_fit_QdiagUnequal_RdiagEqual.rds')
+
+
+#   R is based on the mean perceived measurement accuracy based on the qualifier: 
+#     Standard error was interpreted as equivalent to  SE of flows in natural log units.
+#   Q is based on the standardized diagonal of gam18_rating$Vp
+ marss_fit_QdiagUnequal_RdiagSpecify <- read_rds( 'marss_fit_QdiagUnequal_RdiagSpecify.rds' )
+ 
 #   R is based on the perceived measurement accuracy based on the qualifier: 
 #     Standard error was interpreted as equivalent to  SE of flows in natural log units.
 #     Excellant measurements were assigned a standard error of 0.02
@@ -1116,50 +1282,58 @@ marss_fit_QdiagEqual_Rseries     <- read_rds('marss_fit_QdiagEqual_Rseries.rds')
 
 
 #   Q is diagonal and unequal variances based on gam18_rating, with equal multiplier
-#   R is based on teh perceived measurement quality, in percent
-marss_fit_QdiagMulti_Rseries     <- read_rds('marss_fit_QdiagMulti_Rseries.rds')
+#   R is based on the perceived measurement quality, in percent
+marss_fit_QdiagUnequal_Rseries     <- read_rds('marss_fit_QdiagUnequal_Rseries.rds')
 
 
-# Set up data.frame to compare models
-marss_compare <- data.frame( Model = c('Q diagonal and equal, and R scalars estimated', 
-                                       'Q diagonal and equal, R mean specified',
-                                       'Q diagonal and equal, R series specified', 
-                                       'Q diagonal unequal multiplier, R series specified'), 
-                   'Method'         = c( 'BFGS', 'BFGS', 'kem', 'kem' ),
-                   'Q'              = format( c(marss_fit_QdiagEqual_RdiagEqual$par$Q,
+# Set up data.frame to compare models,
+marss_compare <- data.frame( Q.Process     = c(rep('diagonal and equal', 2), rep('diagonal and unequal with multiplier',2),
+                                             'diagonal and equal', 'diagonal and unequal with multiplier' ),
+                             R.Measurement = c('estimated scalar', 'specified mean', 'estimated scalar', 'specified mean',
+                                             rep('specified series', 2)),
+                   'Method'         = c( 'BFGS', 'BFGS', 'BFGS', 'BFGS', 'kem', 'kem' ),
+                   'Q_Process'      = format( c(marss_fit_QdiagEqual_RdiagEqual$par$Q,
                                                 marss_fit_QdiagEqual_RdiagSpecify$par$Q,
+                                                marss_fit_QdiagUnequal_RdiagEqual$par$Q,
                                                 marss_fit_QdiagEqual_Rseries$par$Q,
-                                                marss_fit_QdiagMulti_Rseries$par$Q), digits = 4),
-                   'R'              = c(format(marss_fit_QdiagEqual_RdiagEqual$par$R, digits = 4),
-                                              'Mean_Qualifier', 'Meas_Qualifier', 'Meas_Qualifier'),
-                   'sqrt_R'         = c(format(sqrt(marss_fit_QdiagEqual_RdiagEqual$par$R), digits = 4),
-                                        format(sqrt(marss_fit_QdiagEqual_RdiagSpecify$model$fixed$R), digits = 4),
-                                        format(sqrt(mean(marss_fit_QdiagEqual_Rseries$marss$fixed$R[1,1,][ndx_ian])), digits = 4),
-                                        format(sqrt(mean(marss_fit_QdiagMulti_Rseries$marss$fixed$R[1,1,][ndx_ian])), digits = 4)),
-                   'likelihood'     = format(c(marss_fit_QdiagEqual_RdiagEqual$logLik, 
+                                                marss_fit_QdiagUnequal_RdiagSpecify$par$Q,
+                                                marss_fit_QdiagUnequal_Rseries$par$Q), digits = 4),
+                   'R_Measurement'  = c(format(marss_fit_QdiagEqual_RdiagEqual$par$R, digits = 4),
+                                        format(marss_fit_QdiagEqual_RdiagSpecify$model$fixed$R, digits = 4),
+                                        format(marss_fit_QdiagUnequal_RdiagEqual$par$R, digits = 4),
+                                        format(mean(marss_fit_QdiagEqual_Rseries$marss$fixed$R[1,1,][ndx_ian]), digits = 4),
+                                        rep('R[qualifier(t)]',2)),
+                   'Likelihood'     = format(c(marss_fit_QdiagEqual_RdiagEqual$logLik, 
                                                marss_fit_QdiagEqual_RdiagSpecify$logLik,
+                                               marss_fit_QdiagUnequal_RdiagEqual$logLik,
                                                marss_fit_QdiagEqual_Rseries$logLik,
-                                               marss_fit_QdiagMulti_Rseries$logLik), digits = 4),
-                   'AICc'           = format(c(marss_fit_QdiagEqual_RdiagEqual$AICc,
+                                               marss_fit_QdiagUnequal_RdiagSpecify$logLik,
+                                               marss_fit_QdiagUnequal_Rseries$logLik), digits = 4),
+                   'AIC'            = format(c(marss_fit_QdiagEqual_RdiagEqual$AIC,
                                                marss_fit_QdiagEqual_RdiagSpecify$AIC,
-                                               marss_fit_QdiagEqual_Rseries$AICc,
-                                               marss_fit_QdiagMulti_Rseries$AICc), digits = 4))
+                                               marss_fit_QdiagUnequal_RdiagEqual$AIC,
+                                               marss_fit_QdiagEqual_Rseries$AIC,
+                                               marss_fit_QdiagUnequal_RdiagSpecify$AIC,
+                                               marss_fit_QdiagUnequal_Rseries$AIC), digits = 4))
                                                
                    
 marss_compare %>% 
-  kable( caption = 'Table 5. Summary statistics from Multivariate Autoregressive State-Space estimation.') %>% 
+  kable( caption = 'Table 5. Summary statistics from Multivariate Autoregressive State-Space estimation.',
+         col.names = c('Process Variance, Q', 'Measurement Variance, R', 'Parameter Estimation Method', 
+                       'Process Variance, Q', 
+                       'Measurement Variance, R','Log-likelihood', 'Akaike Information Crieteria')) %>% 
   kable_styling( position = 'center', latex_options = 'scale down') %>% 
-  column_spec(3, width = '8em' ) %>% 
-  add_header_above( c(' ', 'Parameter\nEstimation' = 1, 'Process\nVariance' = 1, 
-                      'Measurement\nVariance' = 1, 'Measurement\nStandard deviation' = 1,
-                      'Log' = 1, 'Akaike\nInformation\nCriteria' = 1),
-                    align = 'l') %>% 
-  footnote(general = c('likelihood, which is maximized in model selection,',
-           'AICc: Akaike Information Criteria with correction for small samples, which is minimized in model selection.',
+  column_spec(1, width = '12em' ) %>% 
+  column_spec(3, width = '8em' ) %>%
+  column_spec(6, width = '8em' ) %>% 
+  add_header_above( c('Structure' = 2, ' ' ,'Characterization' = 2, 
+                      ' ' = 1, ' ' = 1), align = 'center') %>% 
+  footnote(general = c('log-likelihood, a goodness of fit statistic that is maximized in model selection,',
+           'AICc: Akaike Information Criteria is a measure of out-of-sample prediction error that is minimized in model selection.',
            'SE Qualifier: Standard Error of Measurement Qualifier, in percent. Excellent = 2%, Good = 5%, Fair = 8%, and Poor = 12%',
            'Process Variance Q estimated as 5 x 5 diagonal matrix with equal variances.',
-           'BFGS: Broyden–Fletcher–Goldfarb–Shanno quasi Newton parameter estimation',
-           'kem:  kernelized expectation-maximization'))
+           'BFGS: Broyden–Fletcher–Goldfarb–Shanno quasi Newton parameter estimation algorithm.',
+           'kem:  kernelized expectation-maximization algorithm for parameter estimation.'))
              
   
 
@@ -1177,7 +1351,7 @@ Results of two model parameterizations are compared.  The first model estimated 
 
 
 # Select model 3 for analysis
-# marss_fit   <- marss_fit_QdiagMulti_Rseries
+# marss_fit   <- marss_fit_QdiagUnequal_Rseries
 # marss_fit <- marss_fit_QdiagEqual_RdiagEqual
 marss_fit <- marss_fit_QdiagEqual_Rseries
 marss_kf  <- MARSSkf( marss_fit )
