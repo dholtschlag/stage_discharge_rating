@@ -362,7 +362,7 @@ df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_d
 The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 1)`.   
 
 
-```{r days_between_meas, messages = FALSE, warning = FALSE }
+```{r days_between_meas, messages = FALSE, warning = FALSE } 
 
 # Increment figure counter
 fig_no <- fig_no + 1
