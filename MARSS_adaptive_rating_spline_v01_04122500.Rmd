@@ -25,7 +25,7 @@ The distinction between persistent and intermittent changes is somewhat arbitrar
 
 ### Scope
 
-This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the number of discrete measurements available to characterize the change. Adapting tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects due to ice affected streamflow.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
+This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
 
 ```{r setup, include=FALSE}
 # Libraries needed in the analysis are loaded here
@@ -270,7 +270,7 @@ flow_daily_pub %>%
 Figure `r fig_no + 1` shows a time series plot of discrete flow meaurements during the period of analysis. 
 
 
-```{r read_discrete_meas_stage_flow, echo = FALSE}
+```{r read_discrete_meas_stage_flow, echo = FALSE, fig.width = 8}
 
 if( file.exists('discrete_meas.RData')){
   # print('Loading discrete flow measurement data from RData file.')
@@ -307,7 +307,8 @@ discrete_meas <- discrete_meas %>%
 
 fig_no <- fig_no + 1
 discrete_meas %>% 
-  ggplot( aes( x = measurement_dt, y = flow_discrete_mea, color = qualifier)) +
+  ggplot( aes( x = measurement_dt, y = flow_discrete_mea, color = qualifier, 
+               shape = control_type)) +
   geom_point() +
   scale_y_log10() +
   ylab('Measured flow, in cubic feet per second') +
@@ -412,9 +413,246 @@ df %>%
 
 ***
 
+> Unit stage values per day
+
+```{r unit_daily_stage, warning = FALSE }
+
+if( file.exists('stage_unit.RData')){
+  # print('Loading published unit stage data from RData file.')
+  load('stage_unit.RData')
+} else {
+  print('Retrieving daily flow from Aquarius Retrieval')
+  stage_unit <- read.csv('Data/04122500/stage/Gage_height.ft@04122500.EntireRecorda.csv', 
+                         header = TRUE, sep = ',', stringsAsFactors = FALSE, comment = '#')
+  # Standardize field names
+  stage_unit     <- renameNWISColumns(stage_unit)
+  stage_unit$dateTime <- as_datetime(stage_unit$Timestamp..UTC.05.00, tz = 'America/New_York')
+  colnames(stage_unit)[3] <- 'stage'
+  save(stage_unit, file = 'stage_unit.RData')
+}
+
+# Summarize unit stage to daily mean stage
+stage_day <- stage_unit %>% 
+  group_by(day = floor_date( dateTime, 'day')) %>% 
+  summarize( stage_daily_mean  = mean( stage, na.rm = TRUE ),
+             n         = n()) 
+
+fig_no <- fig_no + 1
+suppressMessages(stage_day %>% 
+  # Remove row with missing values
+  ggplot( aes( x = as.Date(day), y = n)) +
+  geom_point( color = 'black', alpha = 0.5, shape = 16, size = 1 ) +
+  geom_vline( xintercept = as.Date( c('1994-05-04', '1997-02-21'), format('%Y-%m-%d')), 
+              linetype = 'dotted', color = 'black' ) +
+  theme_bw() +
+  xlab('Date') +
+  ylab('Number of unit values per day') +
+  ggtitle( paste0('Figure ', fig_no, '. Number of unit stage values per day at 04122500 Pere Marquette River \nat Scottville, Mich. during the period of analysis' )))
+
+stage_day <- stage_day %>% 
+  ungroup() %>% 
+  arrange( day ) %>% 
+  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
+          day_date  = as.Date( day )) 
+
+```
+
+On some days during the period of analysis, multiple discrete measurements were made at `r site_no` 
+
+```{r }
+
+# Measured flows and daily stages for the interval when rating 19 was active
+#  Note: Discrete measurement timing is approximated to days
+
+df_stage_flow_allDays <- data.frame(day = seq.Date(from = date_beg_model, to = date_end_model, by = '1 day'))
+
+# calculate_mode function from https://exploratory.io/note/kanaugust/1701090969905358
+#   Used in subsequent summarize
+calculate_mode <- function(x) {
+  uniqx <- unique(na.omit(x))
+  uniqx[which.max(tabulate(match(x, uniqx)))]
+}
+
+# Take the mean flow and stage for days of multiple flow measurements
+df_discrete_meas <- discrete_meas %>% 
+  group_by( measurement_dt ) %>% 
+  summarize( flow_discrete_mea       = mean( flow_discrete_mea ) ,
+             stage_discrete_mea      = mean( stage_discrete_mea     ) ,
+             n                       = n(),
+             qualifier               = calculate_mode(qualifier),
+             control_type            = calculate_mode(control_type),
+             se_pct                  = mean(se_pct),
+             se_flow                 = mean(se_flow))
+
+# Integrate daily flow and discrete measurements 
+df_stage_flow_allDays <-df_stage_flow_allDays %>% 
+  left_join( df_discrete_meas[, c('measurement_dt', 'flow_discrete_mea', 'stage_discrete_mea',
+                                  'qualifier', 'control_type', 'se_pct', 'se_flow')], 
+             by = c( 'day'  = 'measurement_dt')) %>% 
+  left_join( stage_day[, c('day_date', 'stage_daily_mean')], by = c( 'day' = 'day_date' )) %>% 
+  filter( day >= date_beg_model & day <= date_end_model )
+
+
+```
+
+
+
+### Unit and Daily Stage
+
+Until recently, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the availability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. In developing the approach, it would be helpful if a simple method were available to adapt to changing frequencies of unit value data. 
+
+
+
+```{r read_ratings, results = 'hide' }
+
+# Rating curve at the selected site.  The 'exsa' parameter is an extended table
+#   provide detailed info on stage discharge
+
+rating18 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
+colnames( rating18 ) <- c('rated_flow', 'stage')
+
+# Use rating18 as the initial rating
+rating_init   <- rating18
+#   Rename column rated18_flow to rated_flow_init
+colnames(rating_init)[1] <- 'rated_flow_init'
+
+rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
+colnames( rating19 ) <- c('rated_flow', 'stage')
+
+rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
+colnames( rating20 ) <- c('rated_flow', 'stage')
+
+rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
+colnames( rating21 ) <- c('rated_flow', 'stage')
+
+
+suppressMessages(rating_wide <- rating18   %>%  
+  full_join(   rating19 ) %>% 
+  full_join(   rating20 ) %>% 
+  full_join(   rating21 ) %>% 
+  dplyr::select(stage, everything() ))
+  
+rating_long <- rbind(rating18, rbind(rating19, rbind(rating20, rating21)))
+rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)), 
+                           rep(20, nrow(rating20)), rep(21, nrow(rating21)))
+
+```
+
+
+
+> Estimate missing stage based on daily mean flow and rating curve 19
+
+The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generaly 0.6 ft lower. The datum of the gage is 597.66 ft above National Geodetic Vertical Datum of 1929 (NGVD29). 
+
+
+```{r missing_stage, warning = FALSE }
+
+df_stage_flow_allDays <- df_stage_flow_allDays %>% 
+  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date')) %>% 
+  rename( 'flow_daily_pub'    = 'Flow',
+          'Date'              = 'day')
+
+
+# find indices of missing stage_mean_day values
+ndx_ina <- which( is.na(df_stage_flow_allDays$stage_daily_mean ))
+
+# find indices of bad daily stage from bad unit stage (1994-09-13 to 1994-09-19)
+ndx_bad <- which( df_stage_flow_allDays$Date >= as.Date('1994-09-13') & 
+                  df_stage_flow_allDays$Date <= as.Date('1994-09-19'))
+
+ndx_miss <- sort(c(ndx_ina, ndx_bad))
+
+# Find dates for missing data
+dates_missing <- df_stage_flow_allDays$Date[ndx_miss]
+
+# Estimate daily mean stage from published daily mean flow using rating 18, which was active when most of the missing values occurred)
+stage_missing <- approx( x = rating18$rated_flow, y = rating18$stage, 
+                         xout =df_stage_flow_allDays$flow_daily_pub[ndx_miss])
+
+# Estimated missing daily stage on the basis of published daily mean flow 
+df_stage_flow_allDays$stage_daily_mean[ ndx_miss ] <- stage_missing$y
+df_stage_flow_allDays$stage_miss               <- 'Measured'
+df_stage_flow_allDays$stage_miss[ ndx_miss ]   <- 'Estimated'
+
+df_stage_flow_allDays <- addWaterYear(df_stage_flow_allDays)
+
+min_Stage_group_waterYear <- df_stage_flow_allDays %>% 
+  dplyr::group_by( waterYear ) %>% 
+  summarize(minStage = min(stage_daily_mean),
+            minDate  = Date[ which.min(stage_daily_mean) ])
+
+
+fig_no <- fig_no + 1
+df_stage_flow_allDays[, ] %>% 
+  ggplot( aes( x = Date, y = stage_daily_mean, color = stage_miss )) +
+  geom_point( size = 1 ) +
+  # geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_miss ], color = 'blue') + 
+  # geom_line( data = min_Stage_group_waterYear, aes( x = minDate, y = minStage ), color = 'red') +
+  theme_bw() +
+  xlab('Date') +
+  scale_y_sqrt( breaks = c(1,2,4,6), limits = c(1,7)) +
+  ylab('Stage, in feet above gage datum of 597.66 ft NAVD29') +
+  ggtitle( paste0('Figure ', fig_no, '. Time Series of daily mean stage computed from unit values at \n04122500 Pere Marquette River at Scottville, Mich., during the period of analysis'),
+           subtitle = paste0('Vertical blue lines indicate ', length(ndx_miss), ' days of missing stage that were estimated.'))
+  
+```
+
+
+***
+
+> Stage values used in modeling
+
+Figure `r fig_no + 1 ` shows the close correpondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage was inconsistent with the computed mean.  
+
+
+
+```{r mean_discrete stge}
+
+# 
+# Substitute discrete stage and time of discrete flow measurement
+#   Find indices of discrete stage-flow measurements
+ndx_ian <- which( !is.na( df_stage_flow_allDays$stage_discrete_mea ) )
+
+
+fig_no <- fig_no + 1
+df_stage_flow_allDays[ ndx_ian, ] %>% 
+  mutate( stage_miss = factor( stage_miss, levels = c('Measured', 'Estimated'))) %>% 
+  ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
+  geom_point( aes( color = stage_miss, shape = stage_miss ), alpha = 1 ) +
+  theme_bw() +
+  scale_x_log10( breaks = seq(1, 6, by = 1) ) +
+  scale_y_log10( breaks = seq(1, 6, by = 1) ) +
+  geom_abline( intercept = 0, slope = 1, color = 'salmon') +
+  xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
+  ylab('Daily mean stage on days of discrete measurements, in feet') +
+  ggtitle(paste0('Figure ', fig_no, '. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.'))
+
+
+#   Find discrepancies between daily mean and discrete stage on days of discrete measurements
+del_stage <- df_stage_flow_allDays$stage_discrete[ ndx_ian ] - df_stage_flow_allDays[ ndx_ian, 'stage_daily_mean' ]
+#   Find index of largest (positive) discrepancy
+ndx_day <- which( del_stage == max( del_stage) )
+
+# Find indices of unit stage on day of max stage discrepancy 
+ndx_unit_stage <- which( as.Date(stage_unit$dateTime) == df_stage_flow_allDays$Date[ ndx_ian][ndx_day] )
+# Result is an empty vector.  There are no unit stages on this day.
+ndx_stage <- which( as.Date(stage_unit$dateTime) == as.Date('1992-07-22') ) 
+
+# Substitude discrete stage values for mean daily stage on days of discrete measurement
+df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage_discrete_mea[ ndx_ian ]
+
+
+```
+
+
+
+
+
+***
+
 > Historical Stage-Flow Ratings 
 
-Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the cooresponding interval when the ratings were applied.      
+Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the cooresponding interval when the ratings were applied. 
 
 
 ```{r rating_history }
@@ -461,41 +699,6 @@ tmp %>%
 
 > Plot Historical Stage-Flow Ratings
 
-
-```{r read_ratings, results = 'hide' }
-
-# Rating curve at the selected site.  The 'exsa' parameter is an extended table
-#   provide detailed info on stage discharge
-
-rating18 <- read.csv('Data/04122500/04122500_rating_18.0.txt', header = FALSE, sep = '\t') 
-colnames( rating18 ) <- c('rated_flow', 'stage')
-
-# Use rating18 as the initial rating
-rating_init   <- rating18
-#   Rename column rated18_flow to rated_flow_init
-colnames(rating_init)[1] <- 'rated_flow_init'
-
-rating19 <- read.csv('Data/04122500/04122500_rating_19.0.txt', header = FALSE, sep = '\t') 
-colnames( rating19 ) <- c('rated_flow', 'stage')
-
-rating20 <- read.csv('Data/04122500/04122500_rating_20.0.txt', header = FALSE, sep = '\t') 
-colnames( rating20 ) <- c('rated_flow', 'stage')
-
-rating21 <- read.csv('Data/04122500/04122500_rating_21.0.txt', header = FALSE, sep = '\t') 
-colnames( rating21 ) <- c('rated_flow', 'stage')
-
-
-suppressMessages(rating_wide <- rating18   %>%  
-  full_join(   rating19 ) %>% 
-  full_join(   rating20 ) %>% 
-  full_join(   rating21 ) %>% 
-  dplyr::select(stage, everything() ))
-  
-rating_long <- rbind(rating18, rbind(rating19, rbind(rating20, rating21)))
-rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)), 
-                           rep(20, nrow(rating20)), rep(21, nrow(rating21)))
-
-```
 
 ***
 
@@ -860,157 +1063,8 @@ basis_df %>%
 
 
 
-## Read unit stage values for 04122500 Pere Marquette River at Scottville, MI
-
-```{r unit_daily_stage}
-
-if( file.exists('stage_unit.RData')){
-  # print('Loading published unit stage data from RData file.')
-  load('stage_unit.RData')
-} else {
-  print('Retrieving daily flow from Aquarius Retrieval')
-  stage_unit <- read.csv('Data/04122500/stage/Gage_height.ft@04122500.EntireRecorda.csv', 
-                         header = TRUE, sep = ',', stringsAsFactors = FALSE, comment = '#')
-  # Standardize field names
-  stage_unit     <- renameNWISColumns(stage_unit)
-  stage_unit$dateTime <- as_datetime(stage_unit$Timestamp..UTC.05.00, tz = 'America/New_York')
-  colnames(stage_unit)[3] <- 'stage'
-  save(stage_unit, file = 'stage_unit.RData')
-}
-
-# Summarize unit stage to daily mean stage
-stage_day <- stage_unit %>% 
-  group_by(day = floor_date( dateTime, 'day')) %>% 
-  summarize( stage_daily_mean  = mean( stage, na.rm = TRUE ),
-             n         = n()) %>% 
-  ungroup() %>% 
-  arrange( day ) %>% 
-  mutate( delta_day = as.numeric(day - lag( day ), units = 'days' ),
-          day_date  = as.Date( day )) 
-
-```
-
-On some days during the period of analysis, multiple discrete measurements were made at `r site_no` 
-
-```{r }
 
 
-
-# Measured flows and daily stages for the interval when rating 19 was active
-#  Note: Discrete measurement timing is approximated to days
-
-df_stage_flow_allDays <- data.frame(day = seq.Date(from = date_beg_model, to = date_end_model, by = '1 day'))
-
-# calculate_mode function from https://exploratory.io/note/kanaugust/1701090969905358
-#   Used in subsequent summarize
-calculate_mode <- function(x) {
-  uniqx <- unique(na.omit(x))
-  uniqx[which.max(tabulate(match(x, uniqx)))]
-}
-
-# Take the mean flow and stage for days of multiple flow measurements
-df_discrete_meas <- discrete_meas %>% 
-  group_by( measurement_dt ) %>% 
-  summarize( flow_discrete_mea       = mean( flow_discrete_mea ) ,
-             stage_discrete_mea      = mean( stage_discrete_mea     ) ,
-             n                       = n(),
-             qualifier               = calculate_mode(qualifier),
-             control_type            = calculate_mode(control_type),
-             se_pct                  = mean(se_pct),
-             se_flow                 = mean(se_flow))
-
-# Integrate daily flow and discrete measurements 
-df_stage_flow_allDays <-df_stage_flow_allDays %>% 
-  left_join( df_discrete_meas[, c('measurement_dt', 'flow_discrete_mea', 'stage_discrete_mea',
-                                  'qualifier', 'control_type', 'se_pct', 'se_flow')], 
-             by = c( 'day'  = 'measurement_dt')) %>% 
-  left_join( stage_day[, c('day_date', 'stage_daily_mean')], by = c( 'day' = 'day_date' )) %>% 
-  filter( day >= date_beg_model & day <= date_end_model )
-
-
-```
-
-### Estimate missing stage based on daily mean flow and rating curve 19
-
-```{r missing_stage}
-
-
-df_stage_flow_allDays <- df_stage_flow_allDays %>% 
-  left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date')) %>% 
-  rename( 'flow_daily_pub'    = 'Flow',
-          'Date'              = 'day')
-
-
-# find indices of missing stage_mean_day values
-ndx_ina <- which( is.na(df_stage_flow_allDays$stage_daily_mean ))
-
-# find indices of bad daily stage from bad unit stage (1994-09-13 to 1994-09-19)
-ndx_bad <- which( df_stage_flow_allDays$Date >= as.Date('1994-09-13') & 
-                  df_stage_flow_allDays$Date <= as.Date('1994-09-19'))
-
-ndx_miss <- sort(c(ndx_ina, ndx_bad))
-
-# Find dates for missing data
-dates_missing <- df_stage_flow_allDays$Date[ndx_miss]
-
-# Estimate daily mean stage from published daily mean flow using rating 21 (which has largest stage range)
-stage_missing <- approx( x = rating21$rated21_flow, y = rating21$stage, 
-                         xout =df_stage_flow_allDays$flow_daily_pub[ndx_miss])
-
-# Estimated missing daily stage on the basis of published daily mean flow 
-df_stage_flow_allDays$stage_daily_mean[ ndx_miss ] <- stage_missing$y
-df_stage_flow_allDays$stage_miss               <- 'Measured'
-df_stage_flow_allDays$stage_miss[ ndx_miss ]   <- 'Estimated'
-
-```
-
-
-```{r mean_discrete stge}
-
-# 
-# Substitute discrete stage and time of discrete flow measurement
-#   Find indices of discrete stage-flow measurements
-ndx_ian <- which( !is.na( df_stage_flow_allDays$stage_discrete_mea ) )
-
-df_stage_flow_allDays[ ndx_ian, ] %>% 
-  ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
-  geom_point( aes( color = stage_miss ), alpha = 0.5 ) +
-  theme_bw() +
-  scale_x_log10( breaks = seq(1, 6, by = 1) ) +
-  scale_y_log10( breaks = seq(1, 6, by = 1) ) +
-  geom_abline( intercept = 0, slope = 1, color = 'salmon') +
-  xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
-  ylab('Daily mean stage on days of discrete measurements, in feet') +
-  ggtitle('Figure 9. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.')
-
-
-#   Find discrepancies between daily mean and discrete stage on days of discrete measurements
-del_stage <- df_stage_flow_allDays$stage_discrete[ ndx_ian ] - df_stage_flow_allDays[ ndx_ian, 'stage_daily_mean' ]
-#   Find index of largest (positive) discrepancy
-ndx_day <- which( del_stage == max( del_stage) )
-
-# Find indices of unit stage on day of max stage discrepancy 
-ndx_unit_stage <- which( as.Date(stage_unit$dateTime) == df_stage_flow_allDays$Date[ ndx_ian][ndx_day] )
-# Result is an empty vector.  There are no unit stages on this day.
-ndx_stage <- which( as.Date(stage_unit$dateTime) == as.Date('1992-07-22') ) 
-
-# Substitude discrete stage values for mean daily stage on days of discrete measurement
-df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage_discrete_mea[ ndx_ian ]
-
-
-# # Replot with missing values estimated
-# df_stage_flow_allDays %>% 
-#   ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
-#   geom_point( aes( color = stage_miss ), alpha = 0.5 ) +
-#   theme_bw() +
-#   scale_x_log10( breaks = seq(1, 6, by = 1) ) +
-#   scale_y_log10( breaks = seq(1, 6, by = 1) ) +
-#   geom_abline( intercept = 0, slope = 1, color = 'green4') +
-#   xlab('Stage at time of discrete flow measurements, in feet above streamgage datum') +
-#   ylab('Daily mean stage on days of discrete measurements, in feet') +
-#   ggtitle('Figure 9. Relation between discrete stage and daily mean stage \non days of discrete flow measurements.')
-
-```
 
 ```{r R_variance_distribution, fig.height = 5}
 # Set up data frame to characterize measurement variances
