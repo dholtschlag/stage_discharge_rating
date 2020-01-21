@@ -5,6 +5,8 @@ date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
   html_document:
     theme: paper
+    toc: true
+    toc_depth: 4
   always_allow_html: yes
 bibliography: bibliography.bib
 ---
@@ -23,8 +25,7 @@ The distinction between persistent and intermittent changes is somewhat arbitrar
 
 ### Scope
 
-This paper develops an automated approach for tracking persistent changes in stage-flow relations using on-going discrete-flow measurements and continually updated stage data. Given that discrete flow measurement commonly occur at about 6-week intervals, persistent changes must exist for several months to be detected by the proposed methodology. Tracking intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
-
+This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the number of discrete measurements available to characterize the change. Adapting tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects due to ice affected streamflow.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
 
 ```{r setup, include=FALSE}
 # Libraries needed in the analysis are loaded here
@@ -187,7 +188,16 @@ vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4,
 ```
 
 
-### Data Characteristics
+## Data Components
+
+Continual streamflow data are commonly computed on the basis of continual stage data, and an empirical relation between stage and flow. The continual intervals are generally less than an hour in length, and are referred to as unit data.  The relation between stage and flow is based on periodic discrete stage and flow measurements obtained during a field visit to the streamgage. A set of discrete measurements is used to manually define a curvilinear relation between stage and flow over an extended stage range. The stage-flow relation is commonly referred to as a rating curve or table. Discrete measurements continue thoughout the period of streamgage operation to confirm, update, extend, and revise the stage-flow relatiion as needed accurately compute streamflow. 
+
+Several data components are critical in computing unit streamflow, and derivative products, such as daily (mean) streamflow. Daily streamflow is the primary streamflow statistic used in many water-resource applications. Daily streamflow is commonly used, for example, to compute flow-duration and high- and low-freqency characteristics widely used in design and decision making. Therefore, daily streamflow was the first streamflow statistic to be accessible electronically. 
+
+Historically, unit stage and flow  values have been considered ancillary data of secondary importance to daily streamflow. High cost of electronic store of these data were prohibitive. More recently, however, both unit stage and flow data has been stored in accessible formats along with information on discrete flow measurements. Ready access to these data have been a limiting factor in developing the analysis presented in this paper. 
+
+
+### Daily Streamflow
 
 Daily mean streamflow data for the Pere Marquette River were obtained for the period of record using the USGS National Water Information System (NWIS) by use of the R package 'dataRetrieval' [@DeCicco2019]. Some of the earlier ancillary data used in computing daily mean flows, however, is only available from archived paper records. In particular, unit stage data and discrete flow measurement data are generally available for Pere Marquette River in electronic format since `r format(date_beg_model, '%b %d, %Y')`. The most recent data used in the analysis was `r format(date_beg_model, '%b %d, %Y')`. In this paper, the period of electronic data availability is referred to as the period of analysis (POA). Data summaries presented in the following sections are restricted to this period.
 
@@ -213,12 +223,12 @@ flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
 ***
 
-> Probability Distribution Daily Flows
+> Probability Distribution of Daily Flows
 
 
-Daily mean flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]`, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The natural logarithm of flows were consistent with a three parameter gamma distribution (fig. 2). 
+The empirical probability distribution describes the relative likelihood of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability distribution of the flows are asmmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a model to track changes in stage-flow relations.   
 
-```{r prob_den_flow}
+```{r prob_den_flow, warning = FALSE }
 # Estimate parameters for lgamma3
 gam3_parm <- fitdist(log(flow_daily_pub$Flow), 'gamma3', start = list(shape = 1, scale = 1, thres = 1),
         upper = c(Inf, Inf, min(log(flow_daily_pub$Flow))))
@@ -232,25 +242,32 @@ gam3_df  <- data.frame(gam3_seq, gam3_den)
 fig_no <- fig_no + 1
 
 # Plot the empirical density of log(Flow) with theoretical GAMMA3 Density 
+
 flow_daily_pub %>% 
-  ggplot( aes( log(Flow ))) +
+  ggplot( aes( Flow)) +
   geom_density( fill = 'lightgrey', alpha = 0.5 ) +
   theme_bw() +
-  # scale_x_continuous(breaks = seq(0, 5000, 1000), limits = c(0, 5000) ) + 
-  # geom_vline( xintercept =  min(flow_daily_pub$Flow)) +
-  geom_line( data = gam3_df, aes( x = gam3_seq, y = gam3_den), color = 'red' ) +
-  xlab('Natural log of Flow, in cubic feet per second') +
+  scale_x_continuous( trans = 'log', breaks = c( 300, 500, 1000, 2000, 3000, 4000, 5000), limits = c(300, 5000) ) + 
+  geom_vline( xintercept =  mean(flow_daily_pub$Flow), linetype = 'dashed') +
+  annotate('text', x = 980, y = 0.2, label = paste0('Mean = ', format(mean(flow_daily_pub$Flow), digits = 0 ))) +
+  geom_line( data = gam3_df, aes( x = exp(gam3_seq), y = gam3_den), color = 'red' ) +
+  xlab('Flow, in cubic feet per second') +
   ylab('Probability density') +
-  annotate('text', x = 7.40, y = 1.15, label = 'Theoretical Density: Gamma Distribution ', color = 'red', size = 3.8) +
-  annotate('text', x = 7.65, y = 1.09, label = paste0('dgamma3( shape = ', format( gam3_parm$estimate[1], digits = 4),
-                                    ', scale = ', format( gam3_parm$estimate[2], digits = 4),
-                                    ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
-  annotate('segment', x = 6.54, y = 1.13, xend = 6.675, yend = 1.15, color = 'red' ) +
-  annotate('text', x = 6.5, y = 0.3, label = 'Empirical Density' ) +
-  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \nScottville, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) )
+  annotate('text', x = 350, y = 1.12, label = 'Theoretical \nGamma Density', color = 'red', size = 3.8) +
+  # annotate('text', x = exp(7.65), y = 1.09, label = paste0('dgamma3( shape = ', format( gam3_parm$estimate[1], digits = 4),
+  #                                   ', scale = ', format( gam3_parm$estimate[2], digits = 4),
+  #                                   ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
+  annotate('segment', x = 450, y = 1.10, xend = 570, yend = 1.10, color = 'red' ) +
+  annotate('text', x = exp(6.26), y = 0.15, label = 'Empirical Density' ) +
+  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \nScottville, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
 
 ```
 
+***
+
+### Discrete Flow Measurements
+
+Figure `r fig_no + 1` shows a time series plot of discrete flow meaurements during the period of analysis. 
 
 
 ```{r read_discrete_meas_stage_flow, echo = FALSE}
@@ -288,6 +305,17 @@ discrete_meas <- discrete_meas %>%
          'Date'                =  measurement_dt ) %>% 
   addWaterYear()
 
+fig_no <- fig_no + 1
+discrete_meas %>% 
+  ggplot( aes( x = measurement_dt, y = flow_discrete_mea, color = qualifier)) +
+  geom_point() +
+  scale_y_log10() +
+  ylab('Measured flow, in cubic feet per second') +
+  xlab('Date of Measurement') +
+  theme_bw() +
+  theme( legend.position = 'bottom') +
+  ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at \nScottville, Mich. during the period or analysis.') )
+
 
 # Source 
 # https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code
@@ -313,12 +341,12 @@ discrete_meas <- discrete_meas[complete.cases(discrete_meas$stage_discrete_mea, 
 
 ***
 
-> Discrete Flow Measurement Hydraulic Controls and Accuracy Qualifiers
+> Hydraulic Controls and Accuracy Qualifiers
 
-Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` tabulates discrete measurements by the type of control and the measurement qualifier. The most common hydraulic control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
+Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` summarizes the type of hydraulic control and the accuracy of discrete flow measurements provided by the qualifier. The most common hydraulic control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
 
 
-The qualifiers assigned to discrete flow measurements were used to estimate uncertainties of the measured flows.  A qualifier of 'Excellent' was associated with a standard error of 2 percent; 'Good,' with a standard error of 5 percent; 'Fair,' with a standard error of 8 percent; and 'Poor,' with a standard error of 12-percent. The associations are loosely based on the 'Discharge Measurement Quality Code' descriptions by USGS NWIS at https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code, accessed Jan. 18, 2020.   
+The qualifiers assigned to discrete flow measurements by hydrographers in the field were used to estimate uncertainties of the measured flows.  In this paper, a qualifier of 'Excellent' was associated with a standard error of 2 percent; 'Good,' with a standard error of 5 percent; 'Fair,' with a standard error of 8 percent; and 'Poor,' with a standard error of 12-percent. The associations are loosely based on the 'Discharge Measurement Quality Code' descriptions by USGS NWIS at https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code, accessed Jan. 18, 2020.   
   
 ```{r measurement_type_freq, echo = FALSE, message = FALSE}
 
@@ -342,7 +370,7 @@ table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
          col.names = c( 'Excellent', 'Good', 'Fair', 'Poor', 'Total') ) %>%
   kable_styling() %>% 
   add_header_above(c("Type of Control" = 1, "Discrete Flow Measurement Qualifier" = 4, ' '), align = 'center') %>% 
-  footnote('Discrete measurements with the type of control "Ice Cover" were subsequently deleted from the analysis because they did not reflect persistent changes. Also, check measurements, which are repeated flow measurements on the same day to confirm the accuracy of the initially measured flow, were made on two days during the period of analysis. An average flow was computed from the two measurements to represent the discrete flow on that day.')
+  footnote('Discrete measurements with the type of control "Ice Cover" were subsequently deleted from the analysis because they did not reflect persistent changes in the stage-flow relation. Also, check measurements, which are repeated flow measurements on the same day to confirm the accuracy of the initially measured flow, were made on two days during the period of analysis. An average flow was computed from the two measurements to represent the discrete flow on that day. Thus, the total number of discrete flow measurements was reduced to 188.')
 
 # Remove ice cover measurements
 discrete_meas <- discrete_meas %>% 
@@ -353,6 +381,7 @@ discrete_meas <- discrete_meas %>%
 
 # Compute time between consequtive flow measurements
 df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_dt, 1))
+
 ```
 
 ***
@@ -375,20 +404,20 @@ df %>%
   geom_vline( xintercept = mean(df$days_between_measurements), color = 'blue', linetype = 'dashed' ) +
   xlab( 'Time between flow measurements, in days' ) +
   ylab( 'Probability Density') +
-  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
+  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \nstreamgage 04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
           subtitle = 'Bin widths include 5 days.') +
-  annotate('text', x = 52, y = 25.5, label = 'Mean', hjust = -1, vjust = 0, color = 'blue')
+  annotate('text', x = 52, y = 25.5, label = 'Mean = 58 days', hjust = -0.25, vjust = 0, color = 'blue')
 
 ```
 
 ***
 
-> Historical Rating Curves 
+> Historical Stage-Flow Ratings 
+
+Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the cooresponding interval when the ratings were applied.      
 
 
-Get rating period info and display
-
-```{r rating_history, }
+```{r rating_history }
 
 # Read rating history
 rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
@@ -418,11 +447,12 @@ suppressMessages(tmp <- discrete_meas %>%
   dplyr::select(rating_no, start_date, end_date, no_meas))
 
 tmp %>% 
-  kable( caption = paste0('Table ', tab_no, ' Number of discrete flow measurements during selected rating periods '),
+  kable( caption = paste0('Table ', tab_no, '. Number of discrete flow measurements during selected rating periods at streamgage 04122500 Pere Marquette River at Scottvile, Mich. during the period of analsyis '),
          col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of Measurements')) %>% 
   kable_styling( full_width = F) %>% 
   column_spec(1, width = '6em' ) %>% 
   column_spec(4, width = '7em' )
+
 
 
 ```
@@ -1229,7 +1259,7 @@ if( file.exists( 'marss_fit_QdiagUnequal_Rseries.rds' )){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-  marss_fit_QdiagUnequal_Rseries  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1, 
+  marss_fit_QdiagUnequal_Rseries  <- MARSS(Yt, model = model.gen, control = list(maxit =  3000, trace = 1, 
                                                             conv.test.slope.tol = 0.05), method = 'kem',
                       inits = coef(marss_fit_QdiagUnequal_Rseries))
   
@@ -1257,10 +1287,6 @@ marss_fit_QdiagEqual_RdiagSpecify <- read_rds('marss_fit_QdiagEqual_RdiagSpecify
 
 # State variance matrix is based on the gam18_measPair$Vp
   # Q <- matrix(list('0.1166336*q',0,0,0,0,
-  #                  0,'1.3179593*q',0,0,0  ,
-  #                  0,0,'0.6810473*q',0,0,
-  #                  0,0,0,'1.0737010*q',0,
-  #                  0,0,0,0,'1.8106588*q'), 5, 5)
   # 
   # R is estimated
   # R  <- 'diagonal and equal'
