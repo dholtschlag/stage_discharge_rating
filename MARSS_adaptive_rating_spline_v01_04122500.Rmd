@@ -540,12 +540,14 @@ rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)),
 
 
 
-> Estimate missing stage based on daily mean flow and rating curve 19
+> Estimate missing stage based on daily mean flow and rating curve 18
 
 The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generaly 0.6 ft lower. The datum of the gage is 597.66 ft above National Geodetic Vertical Datum of 1929 (NGVD29). 
 
+Most of the missing daily mean stage values occurred during the period Rating 18 was in effect (fig. `r fig_no + 1`). Thus, daily mean flows were used with Rating 18 flow-stage relation to estimate all missing daily mean stage values. 
 
-```{r missing_stage, warning = FALSE }
+
+```{r missing_stage, warning = FALSE, fig.width = 8 }
 
 df_stage_flow_allDays <- df_stage_flow_allDays %>% 
   left_join( flow_daily_pub[, c('Date', 'Flow')], by = c('day' = 'Date')) %>% 
@@ -586,11 +588,16 @@ fig_no <- fig_no + 1
 df_stage_flow_allDays[, ] %>% 
   ggplot( aes( x = Date, y = stage_daily_mean, color = stage_miss )) +
   geom_point( size = 1 ) +
-  # geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_miss ], color = 'blue') + 
+  geom_vline( xintercept = as.Date( c('1994-10-25', '2011-03-01', '2013-10-01')) , color = 'blue') + 
   # geom_line( data = min_Stage_group_waterYear, aes( x = minDate, y = minStage ), color = 'red') +
   theme_bw() +
   xlab('Date') +
+  theme( legend.position = 'bottom') +
   scale_y_sqrt( breaks = c(1,2,4,6), limits = c(1,7)) +
+  annotate('text', x = as.Date('1990-01-01'), y = 7, label = 'Rating 18', hjust = 'left') +
+  annotate('text', x = as.Date('2003-01-01'), y = 7, label = 'Rating 19', hjust = 'left') +
+  annotate('text', x = as.Date('2012-01-01'), y = 7, label = '20',        hjust = 'left') +
+  annotate('text', x = as.Date('2016-01-01'), y = 7, label = 'Rating 21', hjust = 'left') +
   ylab('Stage, in feet above gage datum of 597.66 ft NAVD29') +
   ggtitle( paste0('Figure ', fig_no, '. Time Series of daily mean stage computed from unit values at \n04122500 Pere Marquette River at Scottville, Mich., during the period of analysis'),
            subtitle = paste0('Vertical blue lines indicate ', length(ndx_miss), ' days of missing stage that were estimated.'))
@@ -602,7 +609,7 @@ df_stage_flow_allDays[, ] %>%
 
 > Stage values used in modeling
 
-Figure `r fig_no + 1 ` shows the close correpondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage was inconsistent with the computed mean.  
+Figure `r fig_no + 1 ` shows the close correpondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage occurred on a day of a discrete measurement. For the purpose of modeling flows and tracking the changes in the stage-flow relation, daily mean stages were replace with measured discrete stages on days of field measurement so that even the small discrepency between discrete stage measurements and daily mean stage did not degrade modeling accuracy.  
 
 
 
@@ -650,7 +657,7 @@ df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage
 
 ***
 
-> Historical Stage-Flow Ratings 
+### Historical Stage-Flow Ratings 
 
 Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the cooresponding interval when the ratings were applied. 
 
@@ -686,7 +693,7 @@ suppressMessages(tmp <- discrete_meas %>%
 
 tmp %>% 
   kable( caption = paste0('Table ', tab_no, '. Number of discrete flow measurements during selected rating periods at streamgage 04122500 Pere Marquette River at Scottvile, Mich. during the period of analsyis '),
-         col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of Measurements')) %>% 
+         col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of discrete measurements')) %>% 
   kable_styling( full_width = F) %>% 
   column_spec(1, width = '6em' ) %>% 
   column_spec(4, width = '7em' )
@@ -697,10 +704,8 @@ tmp %>%
 
 ***
 
-> Plot Historical Stage-Flow Ratings
+> Plot Historical Stage-Flow Ratings with corresponding discrete measurements
 
-
-***
 
 Figure `r fig_no + 1` shows historical rating curves 18-21 and corresponding discrete flow measurements during the selected rating periods.  A persistent shift to the right is evident in the plot indicating higher rates of flow are discharge at the same stage. The historical rating curves were developed manually.  
 
@@ -735,7 +740,7 @@ rating_long %>%
 ## Methods for Adapting Stage-Flow Rating to Sequential Discrete Flow Measurements
 
 
-### Spline-Regression Model
+### Cubic Spline-Regression Model
 
 A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
 
@@ -743,16 +748,7 @@ Spline regression
 
 
 
-### State-Space Model
 
-
-$$
-\begin{align}
-    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
-    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
-    \text{}
-\end{align}
-$$
 
 
 
@@ -772,89 +768,113 @@ Estimate Generalized Additive Models for each rating curve and for the POA
 ```{r gammeasPair_estimate}
 
 
-# Compute GAM model for each rating period
+# Estimate GAM model for each rating periods
 knts = 5; # knts is the number of knots 
 
-gam18_rating <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
-                      data = rating18, family = Gamma(link = log)) 
+# GAM based on rating table
+gam18_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
+                       data = rating18, family = Gamma(link = log)) 
 
+gam19_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
+                       data = rating19, family = Gamma(link = log))
+
+gam20_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
+                       data = rating20, family = Gamma(link = log))
+
+gam21_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
+                       data = rating21, family = Gamma(link = log))
+
+# Summarize GAM of rating-based model
+gam18_rating_sum  <- summary(gam18_rating)
+gam19_rating_sum  <- summary(gam19_rating)
+gam20_rating_sum  <- summary(gam20_rating)
+gam21_rating_sum  <- summary(gam21_rating)
+
+
+# GAM based on discrete stage-flow measurement data 
 gam18_measPair <-  gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts), 
-                      # weights = wt, 
-                      method = 'REML',
                       data = discrete_meas[ discrete_meas$rating == 18, ],
                       family = Gamma(link = log))
 
-gam19_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
-                      data = rating19, family = Gamma(link = log))
-
 gam19_measPair <-  gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts), 
-                      # weights = wt, 
-                      method = 'REML',
                       data = discrete_meas[ discrete_meas$rating == 19, ],
                       family = Gamma(link = log))
 
-gam20_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
-                      data = rating20, family = Gamma(link = log))
-
 gam20_measPair  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
-                      # weights = wt, 
                       data = discrete_meas[ discrete_meas$rating == 20, ],
                       family = Gamma(link = log))
 
-gam20_rating    <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
-                      data = rating20, family = Gamma(link = log))
 
 gam21_measPair  <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
-                      # weights = wt, 
                       data = discrete_meas[ discrete_meas$rating == 21, ],
                       family = Gamma(link = log))
 
-gam21_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),
-                      data = rating21, family = Gamma(link = log))
 
 gamPOA_measPair <- gam( flow_discrete_mea ~ s(stage_discrete_mea, bs = 'cr', k = knts),
-                      # weights = wt, 
                       data = discrete_meas,
                       family = Gamma(link = log))
 
 # Compute GAM summary statistics
-gam18_summary  <- summary(gam18_measPair)
-gam19_summary  <- summary(gam19_measPair)
-gam20_summary  <- summary(gam20_measPair)
-gam21_summary  <- summary(gam21_measPair)
-gamPOA_summary <- summary(gamPOA_measPair)
+gam18_measPair_sum  <- summary(gam18_measPair)
+gam19_measPair_sum  <- summary(gam19_measPair)
+gam20_measPair_sum  <- summary(gam20_measPair)
+gam21_measPair_sum  <- summary(gam21_measPair)
+gamPOA_measPair_sum <- summary(gamPOA_measPair)
 
 
-gam_stats <- data.frame('Model' = c('gam18', 'gam19', 'gam20', 'gam21', 'gamPOA'),
-                           'N'              = c(gam18_summary$n, gam19_summary$n , gam20_summary$n,
-                                                 gam21_summary$n, gamPOA_summary$n),
-                           'Residual.df'    =  format(c(gam18_summary$residual.df, gam19_summary$residual.df ,
-                                                        gam20_summary$residual.df, gam21_summary$residual.df,
-                                                        gamPOA_summary$residual.df), digits = 4),
-                           'Intercept'      = format(c( gam18_measPair$coefficients[1], gam19_measPair$coefficients[1],
-                           gam20_measPair$coefficients[1], gam21_measPair$coefficients[1], gamPOA_measPair$coefficients[1]),
-                           digits = 4),
-                           'beta1'      = format(c( gam18_measPair$coefficients[2], gam19_measPair$coefficients[2],
-                           gam20_measPair$coefficients[2], gam21_measPair$coefficients[2], gamPOA_measPair$coefficients[2]),
-                           digits = 4),
-                           'beta2'      = format(c( gam18_measPair$coefficients[3], gam19_measPair$coefficients[3],
-                           gam20_measPair$coefficients[3], gam21_measPair$coefficients[3], gamPOA_measPair$coefficients[3]),
-                           digits = 4),
-                           'beta3'      = format(c( gam18_measPair$coefficients[4], gam19_measPair$coefficients[4],
-                           gam20_measPair$coefficients[4], gam21_measPair$coefficients[4], gamPOA_measPair$coefficients[4]),
-                           digits = 4),
-                           'beta4'      = format(c( gam18_measPair$coefficients[5], gam19_measPair$coefficients[5],
-                           gam20_measPair$coefficients[5], gam21_measPair$coefficients[5], gamPOA_measPair$coefficients[5]),
-                           digits = 4),
-                           'R2.adj'          = format(c(gam18_summary$r.sq, gam19_summary$r.sq, gam20_summary$r.sq,
-                                                        gam21_summary$r.sq, gamPOA_summary$r.sq), digits = 4))
+gam_stats <- data.frame('Rating'          = c('18', '19', '20', '21', '18', '19', '20', '21', 'POA'),
+                           'N'            = c(gam18_rating_sum$n, gam19_rating_sum$n , gam20_rating_sum$n,
+                                              gam21_rating_sum$n, gam18_measPair_sum$n, gam19_measPair_sum$n , 
+                                              gam20_measPair_sum$n, gam21_measPair_sum$n, gamPOA_measPair_sum$n),
+                           'Residual.df'  =  format(c(gam18_rating_sum$residual.df, gam19_rating_sum$residual.df,
+                                                        gam20_rating_sum$residual.df, gam21_rating_sum$residual.df,
+                                                        gam18_measPair_sum$residual.df, gam19_measPair_sum$residual.df,
+                                                        gam20_measPair_sum$residual.df, gam21_measPair_sum$residual.df,
+                                                        gamPOA_measPair_sum$residual.df), digits = 4),
+                           'Intercept'      = format(c(gam18_rating$coefficients[1], gam19_rating$coefficients[1],
+                                                        gam20_rating$coefficients[1], gam21_rating$coefficients[1],
+                                                        gam18_measPair$coefficients[1], gam19_measPair$coefficients[1],
+                                                        gam20_measPair$coefficients[1], gam21_measPair$coefficients[1],
+                                                        gamPOA_measPair$coefficients[1]), digits = 4),
+                           'beta1'      = format(c(gam18_rating$coefficients[2], gam19_rating$coefficients[2],
+                                                        gam20_rating$coefficients[2], gam21_rating$coefficients[2],
+                                                        gam18_measPair$coefficients[2], gam19_measPair$coefficients[2],
+                                                        gam20_measPair$coefficients[2], gam21_measPair$coefficients[2],
+                                                        gamPOA_measPair$coefficients[2]), digits = 4),
+                           'beta2'      = format(c(gam18_rating$coefficients[3], gam19_rating$coefficients[3],
+                                                        gam20_rating$coefficients[3], gam21_rating$coefficients[3],
+                                                        gam18_measPair$coefficients[3], gam19_measPair$coefficients[3],
+                                                        gam20_measPair$coefficients[3], gam21_measPair$coefficients[3],
+                                                        gamPOA_measPair$coefficients[3]), digits = 4),
+                           'beta3'      = format(c(gam18_rating$coefficients[4], gam19_rating$coefficients[4],
+                                                        gam20_rating$coefficients[4], gam21_rating$coefficients[4],
+                                                        gam18_measPair$coefficients[4], gam19_measPair$coefficients[4],
+                                                        gam20_measPair$coefficients[4], gam21_measPair$coefficients[4],
+                                                        gamPOA_measPair$coefficients[4]), digits = 4),
+                           'beta4'      = format(c(gam18_rating$coefficients[5], gam19_rating$coefficients[5],
+                                                        gam20_rating$coefficients[5], gam21_rating$coefficients[5],
+                                                        gam18_measPair$coefficients[5], gam19_measPair$coefficients[5],
+                                                        gam20_measPair$coefficients[5], gam21_measPair$coefficients[5],
+                                                        gamPOA_measPair$coefficients[5]), digits = 4),
+                           'R2.adj'          = format(c(gam18_rating_sum$r.sq, gam19_rating_sum$r.sq,
+                                                        gam20_rating_sum$r.sq, gam21_rating_sum$r.sq,
+                                                        gam18_measPair_sum$r.sq, gam19_measPair_sum$r.sq,
+                                                        gam20_measPair_sum$r.sq, gam21_measPair_sum$r.sq,
+                                                        gamPOA_measPair_sum$r.sq), digits = 4))
 # Increment tab_no
 tab_no <- tab_no + 1
 
 gam_stats %>% 
-  kable( caption = paste('Table', tab_no, '. Summary statistics of five-knot cubic regression splines from Generalized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).' )) %>% 
+  kable( caption = paste('Table', tab_no, '. Summary statistics of five-knot cubic regression splines from Generalized Additive Models for selected rating periods 18 - 20 and the Period of Analysis (POA).' ), 
+  col.names = c('Rating period', 'Number of data points', 'Residual degrees of freedom', "beta_0",
+                "beta_1", 'beta_2', 'beta_3', "beta_4", 'R^2')) %>% 
   kable_styling() %>% 
-  add_header_above( c(' ' = 3, 'Estimated Parameters' = 5, ' ' = 1 ) )
+  add_header_above( c(' ' = 3, 'Estimated Parameters' = 5, ' ' = 1 ) ) %>% 
+  pack_rows('Based on stage-flow rating table', 1, 4) %>% 
+  pack_rows('Based on discrete stage-flow measurement', 5, 9) %>% 
+  column_spec(1, width = "5em") %>% 
+  column_spec(2, width = "5em") %>% 
+  column_spec(3, width = "8em")
 
 
 ```
@@ -1056,6 +1076,9 @@ basis_df %>%
            subtitle = 'Note: The basis0 equals 1 for all stages and was not included in the plots below' )
 
 
+
+
+
 ```
 
 
@@ -1093,18 +1116,7 @@ data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>%
 ```
 
 
-## Initial state space model
-Yt is measured flow referenced to the day of measurement during the period when rating 19 was active. Most values are NA
-Xt is the 10 x 1 state vector of GAM parameters used to approximate rating 19
-Q  is the fixed 10X10 covariance matrix of parameters
-R  is an estimated constant measurement variance
-Zt is the matrix of fixed measurement components 
-Yt is sequential daily values of log_stage_round 
-
-
-Note: A multiplicative form for the Q matrix can be specified as:
-This is provided just as a reminder of the format for defining Q with a multiplicative constant.
-Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
+### Formatting data for a state space model
 
 
 ```{r set_marss_global_parameters}
@@ -1115,8 +1127,9 @@ Yt <- matrix( log(df_stage_flow_allDays$flow_discrete_mea), nrow = 1)
 # Indexes for measured flows in vector
 # ndx_ian_Yt <- which( !is.na(Yt) )
 
+per_NA <- format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 )
 print(paste('The measurement vector is', 
-            format( length(which( is.na(Yt))) / length(Yt) * 100, digit = 3 ),'percent NA values.'))
+             per_NA,'percent NA values.'))
 
 
 Zt <- t(predict( gam18_rating, newdata = data.frame( stage = df_stage_flow_allDays$stage_daily_mean),
@@ -1142,8 +1155,40 @@ V0 <- gam18_rating$Vp * 1000
 
 
 ```
+The R package MARSS [@MARSS2018] was used in developing the state-space model. The notation below follows the authors' notation. 
 
-## Model marss_fit_QdiagEqual_RdiagEqual
+### State-Space Model
+
+The state-space model [@MARSS2018]
+
+$$
+\begin{align}
+    \text{State Equation:  }  x_{t} &= {I_n} \: x_{t-1} + w_t && \text{where } w_t \text{~} MVN(0, Q) \text{,}\\
+    \text{Measurement Equation:  } y_{t} &= Z_t \text{ } x_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+    \text{}
+\end{align}
+$$
+
+Following notation by [@MARSS2018], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained `r per_NA` percent *not available* indicators. 
+
+$\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots and subsequent parameters specified in the generalized additive model (GAM) cubic spline regression equatiion. Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output.  These include *xtT*, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt* is the filter estimate of the state vector at time *t* given information up to time *t*; and *xtt1* is the predicted state at time *t* given information up to time *t-1*. 
+
+Q is a $5\times5$ diagonal process variance matrix, which increments the variance *V* of the state vector with each time step in the model.  In the state equation, the process variance indicates the incremental increase in variance of spline regression parameters associated with each day since a discrete measurement of flow occurred. The elements of Q are estimated in the Multivariate Autoregressive State Space (MARSS) model .  To simulate unit flows, the diagonal elements of the Q matrix would be divided by the number of unit values in a day.     
+
+R  is an estimated constant measurement variance
+
+Zt is the design matrix of   
+
+Yt is sequential daily values of log_stage_round 
+
+
+Note: A multiplicative form for the Q matrix can be specified as:
+This is provided just as a reminder of the format for defining Q with a multiplicative constant.
+Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
+
+
+
+#### Model marss_fit_QdiagEqual_RdiagEqual
 
 ```{r marss_QdiagEqual_RdiagEqual}
 
@@ -1163,6 +1208,8 @@ if( file.exists('marss_fit_QdiagEqual_RdiagEqual.rds') ){
 
 
 ```
+
+#### Model marss_fit_QdiagEqual_RdiagSpecify
 
 
 ```{r marss_QdiagEqual_RdiagSpecify}
@@ -1189,7 +1236,7 @@ if( file.exists('marss_fit_QdiagEqual_RdiagSpecify.rds') ){
 ```
 
 
-## Model kem_fit_QdiagUnequal_Restimate
+#### Model marss_fit_QdiagUnequal_RdiagEqual
 
 ```{r marss_QdiagUnequal_RdiagEqual}
 
@@ -1222,7 +1269,7 @@ if( file.exists( 'marss_fit_QdiagUnequal_RdiagEqual.rds' )){
 ```
 
 
-## Model kem_fit_QdiagUnequal_RdiagSpecify
+#### marss_fit_QdiagUnequal_RdiagSpecify
 
 ```{r marss_QdiagUnequal_RdiagSpecify}
 
@@ -1254,7 +1301,7 @@ if( file.exists( 'marss_fit_QdiagUnequal_RdiagSpecify.rds' )){
 }
 ```
 
-## Model kem_fit_QdiagEqual_RSeries
+#### Model marss_fit_QdiagEqual_Rseries
 
 ```{r set_marss_local_QdiagEqual_Rseries}
 
@@ -1285,7 +1332,7 @@ if ( file.exists( 'marss_fit_QdiagEqual_Rseries.rds' )){
 ```
 
 
-## Model marss_fit_QdiagUnequal_Rseries
+#### Model marss_fit_QdiagUnequal_Rseries
 
 ```{r set_marss_local_QdiagUnequal_Rseries}
 
@@ -1324,8 +1371,7 @@ if( file.exists( 'marss_fit_QdiagUnequal_Rseries.rds' )){
 
 
 
-## State-Space Estimation
-
+### State-Space Modeling Results
 
 
 ```{r state_space_compare}
@@ -1433,13 +1479,18 @@ Results of two model parameterizations are compared.  The first model estimated 
 # Select model 3 for analysis
 # marss_fit   <- marss_fit_QdiagUnequal_Rseries
 # marss_fit <- marss_fit_QdiagEqual_RdiagEqual
-marss_fit <- marss_fit_QdiagEqual_Rseries
-marss_kf  <- MARSSkf( marss_fit )
+marss_fit   <- marss_fit_QdiagEqual_Rseries
+marss_kf    <- MARSSkf( marss_fit )
+# kfss function provids Innov, J, J0, Kt, Sigma, Vtt
+# marss_kfss  <- MARSSkfss( marss_fit )
   
+
 
 df_stage_flow_allDays$ytT    <- marss_fit$ytT[1, ]
 
 df_stage_flow_allDays$ytT.se <- marss_fit$ytT.se[, ]
+
+# df_stage_flow_allDays$Kt     <- marss_kfss$Kt
 
 df_stage_flow_allDays <- addWaterYear(df_stage_flow_allDays)
 
@@ -1468,6 +1519,7 @@ df_stage_flow_allDays %>%
   facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
   ggtitle( 'Figure x. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
            subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.')
+
 
 ```
 
