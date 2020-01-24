@@ -190,9 +190,9 @@ vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4,
 
 ## Data Components
 
-Continual streamflow data are commonly computed on the basis of continual stage data, and an empirical relation between stage and flow. The continual intervals are generally less than an hour in length, and are referred to as unit data.  The relation between stage and flow is based on periodic discrete stage and flow measurements obtained during a field visit to the streamgage. A set of discrete measurements is used to manually define a curvilinear relation between stage and flow over an extended stage range. The stage-flow relation is commonly referred to as a rating curve or table. Discrete measurements continue thoughout the period of streamgage operation to confirm, update, extend, and revise the stage-flow relatiion as needed accurately compute streamflow. 
+Continual streamflow data are commonly computed on the basis of continual stage data, and an empirical relation between stage and flow. The continual intervals are generally less than an hour in length, and are referred to as unit data.  The relation between stage and flow is based on periodic discrete stage and flow measurements obtained during a field visit to the streamgage. A set of discrete measurements is used to manually define a curvilinear relation between stage and flow over an extended stage range. The stage-flow relation is commonly referred to as a rating curve or table. Discrete measurements continue throughout the period of streamgage operation to confirm, update, extend, and revise the stage-flow relation as needed accurately compute streamflow. 
 
-Several data components are critical in computing unit streamflow, and derivative products, such as daily (mean) streamflow. Daily streamflow is the primary streamflow statistic used in many water-resource applications. Daily streamflow is commonly used, for example, to compute flow-duration and high- and low-freqency characteristics widely used in design and decision making. Therefore, daily streamflow was the first streamflow statistic to be accessible electronically. 
+Several data components are critical in computing unit streamflow, and derivative products, such as daily (mean) streamflow. Daily streamflow is the primary streamflow statistic used in many water-resource applications. Daily streamflow is commonly used, for example, to compute flow-duration and high- and low-frequency characteristics widely used in design and decision making. Therefore, daily streamflow was the first streamflow statistic to be accessible electronically. 
 
 Historically, unit stage and flow  values have been considered ancillary data of secondary importance to daily streamflow. High cost of electronic store of these data were prohibitive. More recently, however, both unit stage and flow data has been stored in accessible formats along with information on discrete flow measurements. Ready access to these data have been a limiting factor in developing the analysis presented in this paper. 
 
@@ -226,7 +226,7 @@ flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 > Probability Distribution of Daily Flows
 
 
-The empirical probability distribution describes the relative likelihood of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability distribution of the flows are asmmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a model to track changes in stage-flow relations.   
+The empirical probability distribution describes the relative likelihood of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability distribution of the flows are asymmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a model to track changes in stage-flow relations.   
 
 ```{r prob_den_flow, warning = FALSE }
 # Estimate parameters for lgamma3
@@ -267,7 +267,7 @@ flow_daily_pub %>%
 
 ### Discrete Flow Measurements
 
-Figure `r fig_no + 1` shows a time series plot of discrete flow meaurements during the period of analysis. 
+Figure `r fig_no + 1` shows a time series plot of discrete flow measurements during the period of analysis. 
 
 
 ```{r read_discrete_meas_stage_flow, echo = FALSE, fig.width = 8}
@@ -354,7 +354,7 @@ The qualifiers assigned to discrete flow measurements by hydrographers in the fi
 # Increment table counter
 tab_no <- tab_no + 1
 table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
-  rbind(c(sum(discrete_meas$qualifier == 'Excelent'),
+  rbind(c(sum(discrete_meas$qualifier == 'Excellent'),
           sum(discrete_meas$qualifier == 'Good'),
           sum(discrete_meas$qualifier == 'Fair'), 
           sum(discrete_meas$qualifier == 'Poor'))) %>% 
@@ -542,7 +542,7 @@ rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)),
 
 > Estimate missing stage based on daily mean flow and rating curve 18
 
-The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generaly 0.6 ft lower. The datum of the gage is 597.66 ft above National Geodetic Vertical Datum of 1929 (NGVD29). 
+The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generally 0.6 ft lower. The datum of the gage is 597.66 ft above National Geodetic Vertical Datum of 1929 (NGVD29). 
 
 Most of the missing daily mean stage values occurred during the period Rating 18 was in effect (fig. `r fig_no + 1`). Thus, daily mean flows were used with Rating 18 flow-stage relation to estimate all missing daily mean stage values. 
 
@@ -609,7 +609,7 @@ df_stage_flow_allDays[, ] %>%
 
 > Stage values used in modeling
 
-Figure `r fig_no + 1 ` shows the close correpondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage occurred on a day of a discrete measurement. For the purpose of modeling flows and tracking the changes in the stage-flow relation, daily mean stages were replace with measured discrete stages on days of field measurement so that even the small discrepency between discrete stage measurements and daily mean stage did not degrade modeling accuracy.  
+Figure `r fig_no + 1 ` shows the close correspondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage occurred on a day of a discrete measurement. For the purpose of modeling flows and tracking the changes in the stage-flow relation, daily mean stages were replace with measured discrete stages on days of field measurement so that even the small discrepancy between discrete stage measurements and daily mean stage did not degrade modeling accuracy.  
 
 
 
@@ -659,7 +659,7 @@ df_stage_flow_allDays$stage_daily_mean[ ndx_ian ] <- df_stage_flow_allDays$stage
 
 ### Historical Stage-Flow Ratings 
 
-Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the cooresponding interval when the ratings were applied. 
+Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the corresponding interval when the ratings were applied. 
 
 
 ```{r rating_history }
@@ -692,7 +692,7 @@ suppressMessages(tmp <- discrete_meas %>%
   dplyr::select(rating_no, start_date, end_date, no_meas))
 
 tmp %>% 
-  kable( caption = paste0('Table ', tab_no, '. Number of discrete flow measurements during selected rating periods at streamgage 04122500 Pere Marquette River at Scottvile, Mich. during the period of analsyis '),
+  kable( caption = paste0('Table ', tab_no, '. Number of discrete flow measurements during selected rating periods at streamgage 04122500 Pere Marquette River at Scottville, Mich. during the period of analysis '),
          col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of discrete measurements')) %>% 
   kable_styling( full_width = F) %>% 
   column_spec(1, width = '6em' ) %>% 
@@ -740,31 +740,65 @@ rating_long %>%
 ## Methods for Adapting Stage-Flow Rating to Sequential Discrete Flow Measurements
 
 
-### Cubic Spline-Regression Model
+### Cubic Regression Splines
 
-A Bayesian approach is developed to estimate parameters of a generalized additive model (GAM) [@Wood2006] to describe the dynamic relation between stage and discharge (flow) at a streamgage.  The GAM model provides a basis function and parameter estimates to describe the smooth, monotonically increasing relation between stage and flow using data on direct measurements of stage and flow commonly used to develop a so called rating curve. Bayesian estimation then uses the GAM basis function and re-estimates parameters to explicitly account for the uncertainty in the stage measurements. Data for USGS streamgage 04112500 Red Cedar River at East Lansing, MI are used to illustrate the approach and results of the generally applicable method.  Computations are implemented in the R programming environment [@cite_R].
+Cubic regression splines were developed within the framework of a generalized additive model (GAM) to flexibly represent the monotonically increasing relation between stage and flow. A cubic regression spline, according to [@Wood2017], is a smooth curve created from a set of third-degree polynomials, which are joined at knots where first and second order derivatives are continuous.  The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, and statistics on model fit for the cubic regression splines within the R [@cite_R] programming environment.   
 
-Spline regression 
+A linear form of the cubic regression spline was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A second-order polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$ so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + e_i.$ Thus, a second order polynomial has three basis functions ${1, \ x, \ x^2}$ and three corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2}$.  According to [@Wood2017], a polynomial basis is a useful approximation when interest in on a specific point, however, splines are preferred when interest in the response (flow) is over the entire range of x (stage). 
 
-Cubic spline regression models all had 5 knots.  Knots are 
+Splines used in this analysis were specified as having 5 knots, which corresponds to 5 basis functions and 5 estimated parameters. The first basis function, $b_0(x)$, is a vector of 1's describing an intercept term. Five knots were thought to be sufficiently flexible for the stage-flow relations at the selected streamgage. The five knots are automatically placed at the minimum and maximum of the stage range, and at the $25^{th}, 50^{th}, and \space 75^{th}$ percentiles of the stage values. For each stage value input, 5 basis values are returned.  The basis themselves are not affected by the response variable (flow).  
 
+The linear basis function used in the analysis is written below:
 
+$$ flow(stage_i) = {\displaystyle \sum_{n=0}^{4} b_j(stage_i) \space \beta_j + \varepsilon_i} $$
 
+### State-Space Model
 
-
-
-
-
-
-
+A state-space model consists of two equations: a process or state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x_t}$ contains unobservable states, which here correspond to the five parameters of the cubic spline regression at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y_t}$. These updates are based on the Kalman gain, computed using variance of the state vector, *V* and the variance of the flow measurement *R* [@MARSS2019]. The two equations are solved alternately, starting with the state equation, and iteratively through time indexed by $t.$  The state-space model is written below:
 
 
+$$
+\begin{align}
+    \text{State Equation:  }  \vec{x_}_{t} &=  \: \vec{x}_{t-1} + \vec{w_t} && \text{where } \vec{w_t} \text{~} MVN(0, Q) \text{,}\\
+    \text{Measurement Equation:  } y_{t} &= Z_{t,n} \text{ } \vec{x_{t}} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+    \text{}
+\end{align}
+$$
+where $MVN(\vec0,Q)$ indicates *Multi-Variate Normal* with mean process error $\vec{0{_n}}$, and process variance *Q*, and *N* indicates *Normally* distributed with mean *0* and measurement variance *R.*  
+
+The vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of parameters specified in the cubic spline regression. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk. This implies that the state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing values (NA) in the flow series $Y_t$. The variance of the state vector $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while the state variance $V_t^+$ is reduced at times of discrete measurements in the measurement equation. 
+
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@MARSS2019].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x_0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interesst. 
+
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Similarly, the stage on days of discrete measurements is the corresponding discrete stage measurement, rather than the daily mean of unit stage values for that day. The natural logarithm is used in $Y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modelled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
+
+The $5\times5$ process variance matrix *Q* reflects the temporal increase in uncertainty in the state covariance matrix $V_t^{-}$ in the state equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the spline parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, *Q* is unknown, but estimated as diagonal matrix in various forms. 
+
+The measurement variance *R* reflects the uncertainties in discrete measurements of flow.  Hydrographers provide qualifiers to describe the precision of discrete flow measurements as: *Excellent,* for measurements thought to be within 2-percent of the actual flow; *Good* for measurements within 5-percent; 'Fair' for measurements within 8-percent, and *Poor* for measurements that may be >8 percent from the actual flow.  (https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code). In this analysis, these uncertainties were interpreted as standard errors, in percent, for *Excellent, Good, Fair,* and *Poor* measurement qualifiers as 2, 5, 8 and 12, respectively. In addition, to using the hydrographer estimates directly, the measurement uncertainties were estimated from the data. 
+
+$Z_t$ is the set of $1\times 5$ time series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+
+All parameters estimated in various forms of the $Q$ matrix and $R$ times series vector were computed using the MARSS software and supporting functions [@MARSS2019].
+
+
+## Results of Cubic Spline Regression and State-Space Modeling
+
+
+
+### Cubic Regression Splines
+ 
+Genearlized Additive Modeling software [@mgcv2019] was used to develop cubic spline regression models describing the relations between stage and flow on Pere Marquette River at Scottville, Mich. for rating periods 18, 19, 20, and 21.  Cubic splines were developed directly from expanded (0.01 ft increments of stage) ratings and from paired discrete measurements of stage and flow obtained during periods when the ratings were effective. Both methods produced close approximations of the existing rating curves, but there are advantages and disadvantages to both methods. 
+
+from expanded (0.01 ft increments of stage) rating
+and flow at 0.01 ft increments of stage for rating 18, 19, 20, and 21. The results of the modeling efforts are shown in table 3. For models estimated directly from the expanded stage-flow ratings, the cubic spline models were essentially identical to the expanded ratings, reflected by coefficients of determination (R^2^) values of approximately 1. Preliminary plots showed no discerable differences between the rating table data and the cubic spline model, so the plot were not included.  Confidence intervals about the cubic spline, however, were too narrow to interpret the uncertainty in the cubic splines because the number of effective points were simply a function of the table increments.  
+
+rating tables of stage and flow data, and from discrete measurements of stage and flow obtained during field visits.
+Parameter estimates for the splines [$\beta_0$, $\beta_1$, $\beta_3$, and $\beta_4$] were fairly consistent among rating periods. 
 
 
 
 
 
-Estimate Generalized Additive Models for each rating curve and for the POA
 
 ```{r gammeasPair_estimate}
 
@@ -1117,7 +1151,7 @@ data.frame( measurement_variance = R[1, 1, ndx_ian_Yt])  %>%
   scale_y_continuous( labels = scales::percent, limits = c(0, 1) ) +
   geom_vline( xintercept = 300) +
   theme_bw() +
-  xlab( 'Measurement variance based on qualifer of discrete flow measurement') +
+  xlab( 'Measurement variance based on qualifier of discrete flow measurement') +
   ylab( 'Probability density') +
   labs( title = paste0('Figure ', fig_no, '. Frequency density of streamflow measurement variance (R) series based on qualifiers'))
 
@@ -1179,7 +1213,7 @@ $$
 
 Following notation by [@MARSS2018], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained `r per_NA` percent *not available* indicators. 
 
-$\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots and subsequent parameters specified in the generalized additive model (GAM) cubic spline regression equatiion. Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output.  These include *xtT*, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt* is the filter estimate of the state vector at time *t* given information up to time *t*; and *xtt1* is the predicted state at time *t* given information up to time *t-1*. 
+$\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots and subsequent parameters specified in the generalized additive model (GAM) cubic spline regression equation. Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output.  These include *xtT*, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt* is the filter estimate of the state vector at time *t* given information up to time *t*; and *xtt1* is the predicted state at time *t* given information up to time *t-1*. 
 
 Q is a $5\times5$ diagonal process variance matrix, which increments the variance *V* of the state vector with each time step in the model.  In the state equation, the process variance indicates the incremental increase in variance of spline regression parameters associated with each day since a discrete measurement of flow occurred. The elements of Q are estimated in the Multivariate Autoregressive State Space (MARSS) model .  To simulate unit flows, the diagonal elements of the Q matrix would be divided by the number of unit values in a day.     
 
@@ -1483,7 +1517,7 @@ marss_compare <- data.frame( Model = seq(1,7),
 marss_compare %>% 
   kable( caption = 'Table 5. Summary statistics from Multivariate Autoregressive State-Space estimation.',
          col.names = c('Model', 'Process Variance, Q', 'Measurement Variance, R', 'Parameter Estimation Method', 
-                       'Process Variance, Q', 'Measurement Variance, R','Log-likelihood', 'Akaike Information Crieteria',
+                       'Process Variance, Q', 'Measurement Variance, R','Log-likelihood', 'Akaike Information Criteria',
                        'Number of param-eters')) %>% 
   kable_styling( position = 'center', latex_options = 'scale down') %>% 
   column_spec(1, width = '8em' ) %>% 
