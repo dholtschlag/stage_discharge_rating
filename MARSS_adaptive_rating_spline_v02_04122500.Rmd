@@ -4,7 +4,6 @@ author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
   html_document:
-    theme: paper
     toc: true
     toc_depth: 4
   always_allow_html: yes
@@ -21,11 +20,12 @@ The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 
 
 The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank hydraulic characteristics, or change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer a factor, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  
 
-The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the measurement frequency. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of days to weeks during periods when no discrete flow measurements occur. The frequency of discrete flow measurements is constrained by the cost of field visits. 
+The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the measurement frequency. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of hours to days during periods when no discrete flow measurements occur to identify the onset and cessation of these events. The frequency of discrete flow measurements is constrained by the cost of field visits. 
 
 ### Scope
 
-This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
+This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow. Tracking intermittent changes requires more precise information on the timing of onset and cessation of the intermittent effects than is possible from discrete flow measurements.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
+
 
 ```{r setup, include=FALSE}
 # Libraries needed in the analysis are loaded here
@@ -62,7 +62,7 @@ suppressPackageStartupMessages(library(ggsn))
 suppressPackageStartupMessages(library(sf))
 suppressPackageStartupMessages(library(usmap))
 suppressPackageStartupMessages(library(FAdist))
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE, fig.width = 8)
 ```
 
 
@@ -94,7 +94,8 @@ if( file.exists(site_file)){
   # Standardize field names
   site_info  <- renameNWISColumns(site_info)
   # Standarize capitalization of site name
-  site_info$station_nm <- str_to_title( site_info$station_nm )
+  # site_info$station_nm <- str_to_title( site_info$station_nm )
+  site_info$station_nm <- "Pere Marquette River At Scottville, Mich."
   save(site_info, file = site_file)
 }
 
@@ -151,7 +152,7 @@ watershed_df <- data.frame( lon = st_coordinates(watershed)[,1],
 
 
 ```{r plot_site_map, fig.height = 7, fig.width = 7, message = FALSE, warning = 'hide' }
-fig_no <- fig_no + 1
+ fig_no <- fig_no + 1
 
 # Site map with streamgage and drainage basin shown
 vicinity <- map %>% 
@@ -267,10 +268,7 @@ flow_daily_pub %>%
 
 ### Discrete Flow Measurements
 
-Figure `r fig_no + 1` shows a time series plot of discrete flow measurements during the period of analysis. 
-
-
-```{r read_discrete_meas_stage_flow, echo = FALSE, fig.width = 8}
+```{r read_discrete_meas_stage_flow, echo = FALSE,  warning = FALSE }
 
 if( file.exists('discrete_meas.RData')){
   # print('Loading discrete flow measurement data from RData file.')
@@ -293,29 +291,8 @@ control_type <-
           'DebrisModerate'  = 'Moderate Debris',
           'IceCover'        = 'Ice Cover', .ordered = TRUE ) 
 
+# Add control type to data.frame
 discrete_meas$control_type <- control_type
-
-# Rename and filter flow measurement accuracy and period of analysis
-discrete_meas <- discrete_meas %>% 
-  rename('stage_discrete_mea'  = 'gage_height_va',
-         'flow_discrete_mea'   = 'discharge_va',
-         'qualifier'           = 'measured_rating_diff') %>% 
-  filter(qualifier            != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
-  mutate('qualifier'           =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
-         'Date'                =  measurement_dt ) %>% 
-  addWaterYear()
-
-fig_no <- fig_no + 1
-discrete_meas %>% 
-  ggplot( aes( x = measurement_dt, y = flow_discrete_mea, color = qualifier, 
-               shape = control_type)) +
-  geom_point() +
-  scale_y_log10() +
-  ylab('Measured flow, in cubic feet per second') +
-  xlab('Date of Measurement') +
-  theme_bw() +
-  theme( legend.position = 'bottom') +
-  ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at \nScottville, Mich. during the period or analysis.') )
 
 
 # Source 
@@ -329,16 +306,67 @@ discrete_meas %>%
 # P     Poor         The data are >8% (percent) of the actual flow
 
 discrete_meas <- discrete_meas %>% 
+  dplyr::rename( 'qualifier' = 'measured_rating_diff') %>% 
   mutate( se_pct = case_when( qualifier == 'Excellent' ~  2.0,
                               qualifier == 'Good'      ~  5.0,
                               qualifier == 'Fair'      ~  8.0,
                               qualifier == 'Poor'      ~ 12.0),
-          se_flow = se_pct/100 * flow_discrete_mea ) %>% 
-  filter( measurement_dt >= date_beg_model & measurement_dt <= date_end_model )
+          se_flow = se_pct/100 * discharge_va ) 
 
-# Only cases where flow and stage are measured
-discrete_meas <- discrete_meas[complete.cases(discrete_meas$stage_discrete_mea, discrete_meas$flow_discrete_mea),]
+
+# Read rating history
+rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '\t', header = TRUE,
+                            colClasses = c('numeric', 'Date', 'Date'), comment.char = '#')
+
+# Rename discrete measurements accuracy and period of analysis
+discrete_meas <- discrete_meas %>% 
+  rename('stage_discrete_mea'  = 'gage_height_va',
+         'flow_discrete_mea'   = 'discharge_va') %>% 
+  filter(qualifier            != 'Unspecified' | qualifier == !is.na(qualifier)) %>%
+  mutate('qualifier'           =  ordered(qualifier, levels = c('Excellent', 'Good', 'Fair', 'Poor')),
+         'Date'                =  measurement_dt,
+         'rating_no'    =  case_when( Date >= rating_history$start_date[1] & Date <  rating_history$end_date[1] ~ 18,
+                                             Date >= rating_history$start_date[2] & Date <  rating_history$end_date[2] ~ 19,
+                                             Date >= rating_history$start_date[3] & Date <  rating_history$end_date[3] ~ 20,
+                                             Date >= rating_history$start_date[4] & Date <  rating_history$end_date[4] ~ 21),
+         'period_of_analysis'  =  ifelse( Date >= date_beg_model & Date <= date_end_model, TRUE, FALSE)) %>% 
+  dplyr::select( 'Date', 'measurement_nu', 'stage_discrete_mea', 'flow_discrete_mea', 'qualifier', 
+                 'control_type', 'rating_no', 'period_of_analysis', 'se_pct', 'se_flow') %>% 
+  addWaterYear()
 ```
+
+
+Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes or variances of the flow. There may be a tendency, however, for minimum annual stages to trend downward during the period. In particular, annual minimum stage value in the 10-year period centered on 1990 seem to average about 1.5 ft. In contrast, annual minimum annual stage values in the 10-year period centered in 2015 seem to average about 0.5 ft lower. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. 
+
+Also, there are no extended gaps in times between discrete measurements.  
+
+
+```{r plot_discrete_data, message = FALSE }
+# Plot discrete Flow and Stage
+fig_no <- fig_no + 1
+discrete_meas %>% 
+  dplyr::select( Date, flow_discrete_mea, stage_discrete_mea ) %>% 
+  dplyr::rename( Flow = flow_discrete_mea,
+                 Stage = stage_discrete_mea ) %>% 
+  gather( 'Parameter', 'Magnitude',  -Date ) %>% 
+  ggplot( aes( x = Date, y = Magnitude, group = Parameter ) ) +
+  geom_point() +
+  facet_grid( Parameter ~ ., scales = 'free_y' )  +
+  theme_bw() +
+  geom_smooth() +
+  # geom_vline( xintercept = c(date_beg_model, date_end_model), linetype = 'dashed') +
+  # geom_vline( xintercept = as.Date( c('1986-10-01', '1994-10-25', '2011-03-01', '2013-10-01')) , color = 'blue') + 
+  # annotate('segment', x = date_beg_model, xend = date_end_model, y = 3500, yend = 3500 ) +
+  ylab( paste0('Stage, in feet above ', site_info$alt_va, ' ', site_info$alt_datum_cd,
+  '                           Flow, in cubic feet per second') )  +
+  ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at Scottville, \nMich. during the period with accessible discrete measurement data.') )
+
+
+```
+
+
+
+
 
 ***
 
@@ -375,13 +403,15 @@ table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
 
 # Remove ice cover measurements
 discrete_meas <- discrete_meas %>% 
-  dplyr::filter( control_type != 'Ice Cover' ) %>% 
-  dplyr::select( 'measurement_nu', 'measurement_dt', 'measurement_tm', 'tz_cd_reported',
-                 'stage_discrete_mea', 'flow_discrete_mea', 'qualifier',  'control_type',
-                 'se_pct', 'se_flow' )
+  dplyr::filter( control_type != 'Ice Cover' ) 
+  # dplyr::select( 'measurement_nu', 'measurement_dt',
+  #                'stage_discrete_mea', 'flow_discrete_mea', 'qualifier',  'control_type',
+  #                'se_pct', 'se_flow' )
 
 # Compute time between consequtive flow measurements
-df <- data.frame( 'days_between_measurements' = diff(discrete_meas$measurement_dt, 1))
+df <- data.frame( 'days_between_measurements' = diff(discrete_meas$Date, 1))
+
+
 
 ```
 
@@ -414,6 +444,8 @@ df %>%
 ***
 
 > Unit stage values per day
+
+Until recently, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the availability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. In developing the approach, it would be helpful if a simple method were available to adapt to changing frequencies of unit value data. 
 
 ```{r unit_daily_stage, warning = FALSE }
 
@@ -456,8 +488,7 @@ stage_day <- stage_day %>%
           day_date  = as.Date( day )) 
 
 ```
-
-On some days during the period of analysis, multiple discrete measurements were made at `r site_no` 
+` 
 
 ```{r }
 
@@ -475,7 +506,7 @@ calculate_mode <- function(x) {
 
 # Take the mean flow and stage for days of multiple flow measurements
 df_discrete_meas <- discrete_meas %>% 
-  group_by( measurement_dt ) %>% 
+  group_by( Date ) %>% 
   summarize( flow_discrete_mea       = mean( flow_discrete_mea ) ,
              stage_discrete_mea      = mean( stage_discrete_mea     ) ,
              n                       = n(),
@@ -486,9 +517,9 @@ df_discrete_meas <- discrete_meas %>%
 
 # Integrate daily flow and discrete measurements 
 df_stage_flow_allDays <-df_stage_flow_allDays %>% 
-  left_join( df_discrete_meas[, c('measurement_dt', 'flow_discrete_mea', 'stage_discrete_mea',
+  left_join( df_discrete_meas[, c('Date', 'flow_discrete_mea', 'stage_discrete_mea',
                                   'qualifier', 'control_type', 'se_pct', 'se_flow')], 
-             by = c( 'day'  = 'measurement_dt')) %>% 
+             by = c( 'day'  = 'Date')) %>% 
   left_join( stage_day[, c('day_date', 'stage_daily_mean')], by = c( 'day' = 'day_date' )) %>% 
   filter( day >= date_beg_model & day <= date_end_model )
 
@@ -497,10 +528,7 @@ df_stage_flow_allDays <-df_stage_flow_allDays %>%
 
 
 
-### Unit and Daily Stage
-
-Until recently, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the availability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. In developing the approach, it would be helpful if a simple method were available to adapt to changing frequencies of unit value data. 
-
+### Historical Rating Curves
 
 
 ```{r read_ratings, results = 'hide' }
@@ -669,23 +697,23 @@ rating_history <- read.csv( 'Data/04122500/rating_period_start_end.txt', sep = '
                             colClasses = c('numeric', 'Date', 'Date'), comment.char = '#')
 
 # Identify rating period for each discrete measurement 
-discrete_meas <- discrete_meas %>% 
-  mutate(
-    rating = case_when(
-      measurement_dt <  rating_history$start_date[ rating_history$rating_no == 19] ~ 18,
-      measurement_dt >= rating_history$start_date[ rating_history$rating_no == 19] &
-      measurement_dt <  rating_history$start_date[ rating_history$rating_no == 20] ~ 19,
-      measurement_dt >= rating_history$start_date[ rating_history$rating_no == 20] &
-      measurement_dt <  rating_history$start_date[ rating_history$rating_no == 21] ~ 20,
-      measurement_dt >= rating_history$start_date[ rating_history$rating_no == 20] ~ 21)
-  )
+# discrete_meas <- discrete_meas %>% 
+#   mutate(
+#     rating = case_when(
+#       measurement_dt <  rating_history$start_date[ rating_history$rating_no == 19] ~ 18,
+#       measurement_dt >= rating_history$start_date[ rating_history$rating_no == 19] &
+#       measurement_dt <  rating_history$start_date[ rating_history$rating_no == 20] ~ 19,
+#       measurement_dt >= rating_history$start_date[ rating_history$rating_no == 20] &
+#       measurement_dt <  rating_history$start_date[ rating_history$rating_no == 21] ~ 20,
+#       measurement_dt >= rating_history$start_date[ rating_history$rating_no == 20] ~ 21)
+#   )
 
 # Increment table counter
 tab_no <- tab_no + 1
 
 # Print table showing the number of discrete measurements by rating period
 suppressMessages(tmp <- discrete_meas %>% 
-  rename( 'rating_no' = 'rating') %>% 
+  # rename( 'rating_no' = 'effective_rating') %>% 
   group_by( rating_no ) %>% 
   summarize( no_meas = n()) %>% 
   left_join( rating_history ) %>% 
@@ -719,8 +747,9 @@ rating_long %>%
   ggplot( aes( x = rated_flow, y = stage,  color = rating_no)) +
   geom_line( aes( color = factor(rating_no) ), size = 1.0, alpha = 0.50) +
   theme_bw() +
-  geom_point( data = discrete_meas, aes( x = flow_discrete_mea, y = stage_discrete_mea, 
-                                         color = as.factor(rating))) +
+  geom_point( data = discrete_meas[ 9:nrow(discrete_meas), ], aes( x = flow_discrete_mea, y = stage_discrete_mea, 
+                                         color = as.factor(rating_no))) +
+  # geom_text(data = discrete_meas, aes( x = Date, y = stage_discrete_mea, label = measurement_nu ), hjust=0, vjust=0) +
   # facet_wrap( ~ rating_no) +
   theme( legend.position = 'bottom' ) +
   scale_x_continuous( breaks = seq(1000, 7000, by = 1000)) +
@@ -733,9 +762,6 @@ rating_long %>%
 
   
 ```
-
-
-
 
 ## Methods for Adapting Stage-Flow Rating to Sequential Discrete Flow Measurements
 
@@ -752,38 +778,83 @@ The linear basis function used in the analysis is written below:
 
 $$ flow(stage_i) = {\displaystyle \sum_{n=0}^{4} b_j(stage_i) \space \beta_j + \varepsilon_i} $$
 
+> Specification of a Generalized Additive Model for Rating Curve 18  
+
+** Model specification in the R statistical computing environment: **    
+gam18_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),  
+                       data = rating18, family = Gamma(link = log))  
+
+
+
+** data = rated_flow**   the response variable of flow, in cubic feet per second  
+
+| Model Syntax            |  Explanation                                                                                              |  
+|:------------------------|:----------------------------------------------------------------------------------------------------------|  
+|: gam18_rating         |: The gam object produced as model output                                                                  |  
+|: gam( ... )         |: Function from the R package 'mgcv' used to specify the gam model                                         |     
+|:  ~                 |: Relational operator                                                                                      |  
+|: s( ... )           |: Function used in definition of smooth terms within gam model formulae. The function does not evaluate    |  
+|:                        |:   A (spline) smooth - it exists purely to help set up a model using spline based smooths [@mgcv2019],    |  
+|: bs = 'cr'        |: bs is an input argument that accepts a code for the type of smoothing bases. The 'cr' indicates a Cubic  |  
+|:                        |:    Regression Spline [@mgcv2019]                                                                         |  
+|: k = knts         |: k is an input argument for the number of knots, which IS variable knts that is assigned a value of 5     |    
+|: data = rating18  |: The dataframe used in the analysis, with partial listing below this table                                |  
+|: family = Gamma(link = log) |: This is a family object specifying the distribution and link (transformation) to use in fitting the GAM. Based 
+|:  |: on the distribution of daily mean flows, the Gamma distribution family following a natural logarithm transformation is a reasonable choice.| 
+|:   |:
+
+```{r echo = FALSE}
+print('First 6 rows of data in data.frame rating18')
+print( head( rating18 ))
+```
+
+ 
+
 ### State-Space Model
 
-A state-space model consists of two equations: a process or state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x_t}$ contains unobservable states, which here correspond to the five parameters of the cubic spline regression at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y_t}$. These updates are based on the Kalman gain, computed using variance of the state vector, *V* and the variance of the flow measurement *R* [@MARSS2019]. The two equations are solved alternately, starting with the state equation, and iteratively through time indexed by $t.$  The state-space model is written below:
+A state-space model consists of two equations: a process or state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the cubic spline regression at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, *V* and the variance of the flow measurement *R* [@marss2018]. The two equations are solved alternately, starting with the state equation, and iteratively through time indexed by $t.$  The state-space model is written below:
 
 
 $$
 \begin{align}
-    \text{State Equation:  }  \vec{x_}_{t} &=  \: \vec{x}_{t-1} + \vec{w_t} && \text{where } \vec{w_t} \text{~} MVN(0, Q) \text{,}\\
-    \text{Measurement Equation:  } y_{t} &= Z_{t,n} \text{ } \vec{x_{t}} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
-    \text{}
+\text{ State Equation:  } \vec{x}_{t}  &= \: \vec{x}_{t-1} + \vec{w}_{t} && \text{where } \vec{w}_{t} \text{~} MVN(0, Q) \text{,}\\
+ \text{Measurement Equation:  } y_{t} &=     \vec{Z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+ \text{}
 \end{align}
 $$
-where $MVN(\vec0,Q)$ indicates *Multi-Variate Normal* with mean process error $\vec{0{_n}}$, and process variance *Q*, and *N* indicates *Normally* distributed with mean *0* and measurement variance *R.*  
 
-The vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of parameters specified in the cubic spline regression. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk. This implies that the state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing values (NA) in the flow series $Y_t$. The variance of the state vector $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while the state variance $V_t^+$ is reduced at times of discrete measurements in the measurement equation. 
+where $MVN(\vec0,Q)$ indicates a *Multi-Variate Normal* vector with mean $\vec{0}_{n}$, and process variance $Q$.  
+Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and measurement variance $R$.  
 
-Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@MARSS2019].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x_0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interesst. 
+The vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of parameters specified in the cubic spline regression. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk. This implies that the state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing values (NA) in the flow series $Y_t$. The variance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) after discrete measurements in the measurement equation. 
 
-The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Similarly, the stage on days of discrete measurements is the corresponding discrete stage measurement, rather than the daily mean of unit stage values for that day. The natural logarithm is used in $Y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modelled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interesst. 
+
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation also makes the parameterization of the state-space model consistent with the associated GAM model.  Similarly, the stage on days of discrete measurements is the corresponding discrete stage measurement, rather than the daily mean of unit stage values for that day. The natural logarithm is used in $y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modelled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
 
 The $5\times5$ process variance matrix *Q* reflects the temporal increase in uncertainty in the state covariance matrix $V_t^{-}$ in the state equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the spline parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, *Q* is unknown, but estimated as diagonal matrix in various forms. 
 
 The measurement variance *R* reflects the uncertainties in discrete measurements of flow.  Hydrographers provide qualifiers to describe the precision of discrete flow measurements as: *Excellent,* for measurements thought to be within 2-percent of the actual flow; *Good* for measurements within 5-percent; 'Fair' for measurements within 8-percent, and *Poor* for measurements that may be >8 percent from the actual flow.  (https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code). In this analysis, these uncertainties were interpreted as standard errors, in percent, for *Excellent, Good, Fair,* and *Poor* measurement qualifiers as 2, 5, 8 and 12, respectively. In addition, to using the hydrographer estimates directly, the measurement uncertainties were estimated from the data. 
 
-$Z_t$ is the set of $1\times 5$ time series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+${Z}_{t}$ is the set of $1\times 5$ time series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
 
-All parameters estimated in various forms of the $Q$ matrix and $R$ times series vector were computed using the MARSS software and supporting functions [@MARSS2019].
+All parameters estimated in various forms of the $Q$ matrix and $R$ times series vector were computed using the MARSS software and supporting functions [@marss2018].
 
+> Diagonal Process Variance Matrix
+
+$$ Q_1 (diagonal \ and \ equal) =  \begin{bmatrix} q & 0 & 0 & 0 & 0 \\ 0 & q & 0 & 0 & 0 \\ 0 & 0 & q & 0 & 0 \\ 0 & 0 & 0 & q & 0 \\ 0 & 0 & 0 & 0 & q\\ \end{bmatrix}$$
+$$ Q_2 (diagonal \ and \ unequal) =  \begin{bmatrix} q_1 & 0 & 0 & 0 & 0 \\ 0 & q_2 & 0 & 0 & 0 \\ 0 & 0 & q_3 & 0 & 0 \\ 0 & 0 & 0 & q_4 & 0 \\ 0 & 0 & 0 & 0 & q_5\\ \end{bmatrix}$$
+$$ Q_3 (covar \ multiplicative) =  \begin{bmatrix} '0.1166336*q' & 0 & 0 & 0 & 0 \\ 0 & '1.3179593*q' & 0 & 0 & 0 \\ 0 & 0 & '0.6810473*q' & 0 & 0 \\ 0 & 0 & 0 & '1.0737010*q' & 0 \\
+0 & 0 & 0 & 0 & '1.8106588*q'\\ \end{bmatrix}$$
+
+
+> Measurement Variance Time Series  
+
+$$ R (constant) = R_t = [r] for \ all \ t, \ where \ r \ is \ estimated. $$
+ $$ R_t(qualifier): Excellent \ R_t = [0.02^2]; \ Good \ R_t = [0.05^2]; \ Fair \ R_t = [0.08^2]; Poor \ R_t = [0.12^2]  $$
+$$ R = mean(R_t(qualifier)) $$
 
 ## Results of Cubic Spline Regression and State-Space Modeling
-
-
 
 ### Cubic Regression Splines
  
@@ -1015,7 +1086,7 @@ gam_long %>%
   scale_x_continuous( limits = c(0, 10000)) +
   theme( legend.position = 'bottom') +
   geom_point( data = discrete_meas, 
-              aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating), color = 'blue') +
+              aes( x = flow_discrete_mea, y = stage_discrete_mea, group = rating_no), color = 'blue') +
   xlab( 'Flow, in cubic feet per second') +
   ylab( 'Stage, in feet above gage datum') +
   ggtitle( label = paste0('Figure ', fig_no, '. Comparison of rating curves created manually with generalized additive models for selected rating periods'))
@@ -1676,14 +1747,14 @@ adaptive_rating_measDays <- adaptive_rating_measDays %>% addWaterYear()
 
 
 discrete_meas_allDays <- discrete_meas %>% 
-  left_join( df_stage_flow_allDays, by = c('measurement_dt' = 'Date') )
+  left_join( df_stage_flow_allDays, by = 'Date' )
 
 # Find indices of allDays in which discrete flow measurements occurred
 ndx_allDays_measDays <- which( df_stage_flow_allDays$Date %in% discrete_meas$Date )
 
 
 tmp <- df_discrete_meas %>%
-  mutate( Date = measurement_dt ) %>% 
+  # mutate( Date = measurement_dt ) %>% 
   addWaterYear() %>% 
   filter( waterYear %in% sel_yr)
 
@@ -1711,8 +1782,8 @@ adaptive_rating_measDays %>%
 
 
 
-```{r rating_updates, eval = FALSE, fig.height = 18, fig.width = 10}
-N
+```{r rating_updates, eval = FALSE, fig.height = 18, eval = FALSE, fig.width = 10}
+
 Z <- predict( gam18_rating, newdata = data.frame( stage = rating18$stage ),
               type = 'lpmatrix')
 
