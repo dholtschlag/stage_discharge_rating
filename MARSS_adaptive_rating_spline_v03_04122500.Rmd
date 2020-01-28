@@ -254,13 +254,13 @@ flow_daily_pub %>%
   geom_line( data = gam3_df, aes( x = exp(gam3_seq), y = gam3_den), color = 'red' ) +
   xlab('Flow, in cubic feet per second') +
   ylab('Probability density') +
-  annotate('text', x = 350, y = 1.12, label = 'Theoretical \nGamma Density', color = 'red', size = 3.8) +
+  annotate('text', x = 350, y = 1.12, label = 'Theoretical \\n Gamma Density', color = 'red', size = 3.8) +
   # annotate('text', x = exp(7.65), y = 1.09, label = paste0('dgamma3( shape = ', format( gam3_parm$estimate[1], digits = 4),
   #                                   ', scale = ', format( gam3_parm$estimate[2], digits = 4),
   #                                   ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
   annotate('segment', x = 450, y = 1.10, xend = 570, yend = 1.10, color = 'red' ) +
   annotate('text', x = exp(6.26), y = 0.15, label = 'Empirical Density' ) +
-  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \nScottville, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
+  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \n Scottsdale, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
 
 ```
 
@@ -359,7 +359,7 @@ discrete_meas %>%
   # annotate('segment', x = date_beg_model, xend = date_end_model, y = 3500, yend = 3500 ) +
   ylab( paste0('Stage, in feet above ', site_info$alt_va, ' ', site_info$alt_datum_cd,
   '                           Flow, in cubic feet per second') )  +
-  ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at Scottville, \nMich. during the period with accessible discrete measurement data.') )
+  ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at Scottville, \n Mich. during the period with accessible discrete measurement data.') )
 
 
 ```
@@ -424,7 +424,7 @@ df <- data.frame( 'days_between_measurements' = diff(discrete_meas$Date, 1))
 
 > Time Between Discrete Flow Measurements  
 
-The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 1)`.  There are no extended gaps in discrete flow measurements.  The four measurements at zero time between measurements are from check measurements made to ensure the initally measured flow. 
+The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 1)`.  There are no extended gaps in discrete flow measurements.  The four measurements at zero time between measurements are from check measurements made to ensure the initially measured flow. 
 
 
 ```{r days_between_meas, messages = FALSE, warning = FALSE } 
@@ -440,7 +440,7 @@ df %>%
   geom_vline( xintercept = mean(df$days_between_measurements), color = 'blue', linetype = 'dashed' ) +
   xlab( 'Time between flow measurements, in days' ) +
   ylab( 'Probability Density') +
-  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \nstreamgage 04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
+  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n streamgage 04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
           subtitle = 'Bin widths include 5 days.') +
   annotate('text', x = 52, y = 25.5, label = 'Mean = 58 days', hjust = -0.25, vjust = 0, color = 'blue')
 
@@ -484,7 +484,7 @@ suppressMessages(stage_day %>%
   theme_bw() +
   xlab('Date') +
   ylab('Number of unit values per day') +
-  ggtitle( paste0('Figure ', fig_no, '. Number of unit stage values per day at 04122500 Pere Marquette River \nat Scottville, Mich. during the period of analysis' )))
+  ggtitle( paste0('Figure ', fig_no, '. Number of unit stage values per day at 04122500 Pere Marquette River \\ at Scottville, Mich. during the period of analysis' )))
 
 stage_day <- stage_day %>% 
   ungroup() %>% 
@@ -533,9 +533,6 @@ df_stage_flow_allDays <-df_stage_flow_allDays %>%
 
 
 
-### Historical Rating Curves
-
-
 ```{r read_ratings, results = 'hide' }
 
 # Rating curve at the selected site.  The 'exsa' parameter is an extended table
@@ -571,9 +568,9 @@ rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)),
 
 ```
 
+### Estimation of missing stage values
 
-
-> Estimate missing stage based on daily mean flow and rating curve 18
+A stage-flow relation is adapted by changing GAM parameters on the basis of discrete measurements of stage and flow.  Intervening measurements of stage, however, can be used to generate a set of basis functions (one for each knot) from an underlying GAM and used to compute the magnitudes and uncertainties of daily or unit streamflow. 
 
 The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generally 0.6 ft lower. This pattern is consistent with the possible trend in the discrete measurements of stage data discussed earlier. The datum of the gage is 597.66 ft above National Geodetic Vertical Datum of 1929 (NGVD29). Based on visual inspection of the time series, the variability of stage values may be increasing with time.
 
@@ -792,7 +789,7 @@ gam18_rating   <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = k
 |: gam18_rating         |: The gam object produced as model output                                                                  |  
 |: gam( ... )         |: Function from the R package 'mgcv' used to specify the gam model                                         |     
 |:  ~                 |: Relational operator                                                                                      |  
-|: s( ... )           |: Function used in definition of smooth terms within gam model formulae. The function does not evaluate    |  
+|: s( ... )           |: Function used in definition of smooth terms within gam model formula. The function does not evaluate    |  
 |:                        |:   A (spline) smooth - it exists purely to help set up a model using spline based smooths [@mgcv2019],    |  
 |: bs = 'cr'        |: bs is an input argument that accepts a code for the type of smoothing bases. The 'cr' indicates a Cubic  |  
 |:                        |:    Regression Spline [@mgcv2019]                                                                         |  
@@ -829,32 +826,49 @@ Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ 
 
 The vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of parameters specified in the cubic spline regression. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk. This implies that the state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing values (NA) in the flow series $Y_t$. The variance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) after discrete measurements in the measurement equation. 
 
-Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interesst. 
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
 
 > Measurement Time Series $y_t$
 
-The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation also makes the parameterization of the state-space model consistent with the associated GAM model.  Similarly, the stage on days of discrete measurements is the corresponding discrete stage measurement, rather than the daily mean of unit stage values for that day. The natural logarithm is used in $y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modelled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation also makes the parameterization of the state-space model consistent with the associated GAM model.  Similarly, the stage on days of discrete measurements is the corresponding discrete stage measurement, rather than the daily mean of unit stage values for that day. The natural logarithm is used in $y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
 
 > Process Covariance Matrix $Q$
 
-The time-varying process covariance matrix $Q_t$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$  [@simon2006]. The process variance reflects the forecast uncertainty in the transition from time $t-1$ to $t$. After the state equation update, the state covariance matrix increases from $V_{t-1}^+$ to $V_{t}_1$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. 
+The time-varying process covariance matrix $Q_t$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$  [@simon2006]. The process variance reflects the forecast uncertainty in the transition from time $t-1$ to $t$. After the state equation update, the state covariance matrix increases from $V_{t-1}^+$ to $V_{t}_1$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
+
+Daily time steps were used in this paper because the time between discrete flow measurements averaged 58 days. On average, therefore, there is one measurement update for each 58 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@marss2018] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for simulation. 
 
 equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the spline parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, *Q* is unknown, but estimated as diagonal matrix in various forms. 
 
-
-Symmetrical Process Covariance Matrix
-
-$$ Q (symmetrical) =  \begin{bmatrix} q_{11} & q_{12} & q_{13} & q_{14} & q_{15} \\ q_{12} & q_{22} & q_{32} & q_{42} & q_{52} \\ q_{13} & q_{23} & q_{33} & q_{43} & q_{53} \\ q_{14} & q_{24} & q_{34} & q_{44} & q_{54} \\ q_{15} & q_{25} & q_{35} & q_{45} & q_{55}\\ \end{bmatrix}$$
-
-
-
+In this paper, the process variance Q is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating GAM model, which is specified by the number of knots. 
+took on four general forms named by [@marss2018], which include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained', and a custom form enabled by the MARSS software but not explicitly named. In this paper, the special form is referred to as 'std diagonal multiplier', for standardized diagonal multiplier. The diagonal forms are based on the assumption that changes in parameters are independent. Estimation of off-diagonal terms, however, may be more consistent with how changes in parameters occur. The forms of these matrices are illustrated below. 
 
 
 
 $$ Q_1 (diagonal \ and \ equal) =  \begin{bmatrix} q & 0 & 0 & 0 & 0 \\ 0 & q & 0 & 0 & 0 \\ 0 & 0 & q & 0 & 0 \\ 0 & 0 & 0 & q & 0 \\ 0 & 0 & 0 & 0 & q\\ \end{bmatrix}$$
+Diagonal and Unequal Variances
+
+In the 'diagonal and unequal' form of the Process Covariance Matrix, five parameters are estimated $(q_{11}, q_{22}, \dots,q_{55})$ are estimated.  
+
 $$ Q_2 (diagonal \ and \ unequal) =  \begin{bmatrix} q_1 & 0 & 0 & 0 & 0 \\ 0 & q_2 & 0 & 0 & 0 \\ 0 & 0 & q_3 & 0 & 0 \\ 0 & 0 & 0 & q_4 & 0 \\ 0 & 0 & 0 & 0 & q_5\\ \end{bmatrix}$$
-$$ Q_3 (covar \ multiplicative) =  \begin{bmatrix} '0.1166336*q' & 0 & 0 & 0 & 0 \\ 0 & '1.3179593*q' & 0 & 0 & 0 \\ 0 & 0 & '0.6810473*q' & 0 & 0 \\ 0 & 0 & 0 & '1.0737010*q' & 0 \\
-0 & 0 & 0 & 0 & '1.8106588*q'\\ \end{bmatrix}$$
+> Equal Variances and Covariances
+
+In usage  The equal variance and covariance (equalvarcov) means that there is one value on the diagonal and one value on the off-diagonal. Thus, the equalvarcov matrix only has two estimated parameters. 
+
+$$ Q_3 (equalvarcov) =  \begin{bmatrix} q & c & c & c & c \\ c & q & c & c & c \\ c & c & q & c & c \\ c & c & c & q & c \\ c & c & c & c & q\\ \end{bmatrix}$$
+
+> Unconstrained Process Covariance Matrix
+
+The 'unconstrained' case for a covariance matrix like Q is restricted to be symmetrical and positive definite, which guarantees invertibility. So, the $5 \times 5$ Q matrix has only 15 unique elements that are estimated rather than 25. 
+
+$$ Q_4 (unconstrained) \ =  \begin{bmatrix} q_{11} & q_{12} & q_{13} & q_{14} & q_{15} \\ q_{12} & q_{22} & q_{32} & q_{42} &  q_{52} \\ q_{13} & q_{23} & q_{33} & q_{43} & q_{53} \\ q_{14} & q_{24} & q_{34} & q_{44} & q_{54} \\ q_{15} & q_{25} & q_{35} & q_{45} & q_{55}\\ \end{bmatrix}$$
+
+
+> Standardized Diagonal Multiplier for of the Process Covariance Matrix
+
+The standardized diagonal multiplier or 'std diagonal multiplier' form of the process covariance matrix contain five diagonal elements $\hat{q}_{11}, \hat{q}_{22}, \dots,\hat{q}_{55}$ that are based on a related covariance matrix, but standardized so that the elements average 1. A multiplicative constant, $q$ is estimated to multiply the standardized diagonal elements. 
+
+$$ Q_5 (std \ diagonal \ multiplier) =  \begin{bmatrix} '\hat{q}_{11}*q' & 0 & 0 & 0 & 0 \\ 0 & '\hat{q}_{22}*q' & 0 & 0 & 0 \\ 0 & 0 & '\hat{q}_{33}*q' & 0 & 0 \\ 0 & 0 & 0 & '\hat{q}_{44}*q' & 0 \\ 0 & 0 & 0 & 0 & '\hat{q}_{55}*q'\\ \end{bmatrix}$$
 
 > Measurement Variance Time Series $R_t$
 
@@ -862,7 +876,7 @@ The measurement variance *R* reflects the uncertainties in discrete measurements
 
 
 $$ R (constant) = R_t = [r] for \ all \ t, \ where \ r \ is \ estimated. $$
- $$ R_t(qualifier): Excellent \ R_t = [0.02^2]; \ Good \ R_t = [0.05^2]; \ Fair \ R_t = [0.08^2]; Poor \ R_t = [0.12^2]  $$
+$$ R_t(qualifier): Excellent \ R_t = [0.02^2]; \ Good \ R_t = [0.05^2]; \ Fair \ R_t = [0.08^2]; Poor \ R_t = [0.12^2]  $$
 $$ R = mean(R_t(qualifier)) $$
 
 ${Z}_{t}$ is the set of $1\times 5$ time series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
@@ -876,7 +890,7 @@ All parameters estimated in various forms of the $Q$ matrix and $R$ times series
 Genearlized Additive Modeling software [@mgcv2019] was used to develop cubic spline regression models describing the relations between stage and flow on Pere Marquette River at Scottville, Mich. for rating periods 18, 19, 20, and 21.  Cubic splines were developed directly from expanded (0.01 ft increments of stage) ratings and from paired discrete measurements of stage and flow obtained during periods when the ratings were effective. Both methods produced close approximations of the existing rating curves, but there are advantages and disadvantages to both methods. 
 
 from expanded (0.01 ft increments of stage) rating
-and flow at 0.01 ft increments of stage for rating 18, 19, 20, and 21. The results of the modeling efforts are shown in table 3. For models estimated directly from the expanded stage-flow ratings, the cubic spline models were essentially identical to the expanded ratings, reflected by coefficients of determination (R^2^) values of approximately 1. Preliminary plots showed no discerable differences between the rating table data and the cubic spline model, so the plot were not included.  Confidence intervals about the cubic spline, however, were too narrow to interpret the uncertainty in the cubic splines because the number of effective points were simply a function of the table increments.  
+and flow at 0.01 ft increments of stage for rating 18, 19, 20, and 21. The results of the modeling efforts are shown in table 3. For models estimated directly from the expanded stage-flow ratings, the cubic spline models were essentially identical to the expanded ratings, reflected by coefficients of determination (R^2^) values of approximately 1. Preliminary plots showed no discernible differences between the rating table data and the cubic spline model, so the plot were not included.  Confidence intervals about the cubic spline, however, were too narrow to interpret the uncertainty in the cubic splines because the number of effective points were simply a function of the table increments.  
 
 rating tables of stage and flow data, and from discrete measurements of stage and flow obtained during field visits.
 Parameter estimates for the splines [$\beta_0$, $\beta_1$, $\beta_3$, and $\beta_4$] were fairly consistent among rating periods. 
@@ -1318,7 +1332,7 @@ Q <- matrix(list('qb', 0, 0, 0, 0, 0, 0, '10*qb'), 3, 3)
 
 >  1 marss_fit_Q_ones_multiplier_R_one_multiplier
 
-MARSS Model with Q = 'diagoanl and equal' and R = 'diagonal and equal'
+MARSS Model with Q = 'diagonal and equal' and R = 'diagonal and equal'
 
 ```{r marss_fit_Q_ones_multiplier_R_one_multiplier}
 
