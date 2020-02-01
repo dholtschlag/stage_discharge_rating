@@ -12,19 +12,17 @@ bibliography: bibliography.bib
 
 ## Abstract
 
-An adaptive stage-discharge estimation approach is developed to track persistent changes in the relation between water-surface elevations (stages) and streamflow discharges (flows). The approach updates parameters of a cubic spline regression function describing the stage-flow relation using data from periodic discrete flow measurements. The spline parameters form the state vector of a state-space model, while the measurement vector contains the discrete flow measurements. The state-space model is solved iteratively using a Kalman filter. The approach is illustrated using daily data from U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich. Results show the adaptation of a stage-flow relation consistent with rating 18 (applied at the streamgage from 1986-1994), to a relation consistent with rating 21 (applied at the streamgage from 2013-2019), based on 188 discrete flow measurements during the intervening period. In addition, the Kalman filter is used to compute the magnitudes and uncertainties of daily flows at the streamgage for selected years. Once the state-space model estimated from daily values, however, the model can be applied at regular unit (less than daily time intervals) time steps by a simple adjustment of the process variance in the state equation. Persistent or long-term changes in the stage-flow relation can be tracked with this univariate model.  Extension of this model to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate approach involving a streamflow network that is beyond the scope of this model. 
+An adaptive stage-flow estimation approach is developed to track persistent changes in the relation between stage (water-surface elevation) and flow (streamflow discharge) at a stratagem. The approach is initialized by estimating a cubic spline regression of the stage-flow relation within a generalized additive modelling (GAM) framework. The parameters of the cubic spline regression can be estimated from an extended stage-flow rating table, or from pairs of discrete stage and flow measurements that adequately define the stage domain of interest. In addition to these parameters, the basis vectors derived from the stage values and used to develop the regression or from any other set of stage measurements can be extracted or generated from the GAM object. Then, process and measurement error variances of a state-space model are estimated using available discrete measurement data. The fitted state-space model can then be used to update regression parameters with data from each subsequent discrete measurement. The resulting changes in regression parameters and corresponding stage-flow relation can be determined after each discrete measurement.  Finally, Kalman filtering can be used with time series of stage values to compute the magnitude and uncertainty of a streamflow time series. The approach is demonstrated with data from the U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich.  Extension of this approach to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate analysis involving a streamflow network that is beyond the scope of this report. 
 
 ## Background
 
-The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 active streamgages throughout the United States. Streamgages measure flow from the upstream basin, which is generally topographically defined.  Computations are commonly based on continual measurements of stage at 10- to 60-minute intervals. The stage data is used to compute corresponding values of flow based on a empirical relation between stage and flow commonly referred to as a rating curve or table. The rating describes a monotonically increasing relation between stage and flow. This rating is developed and maintained on the basis of discrete, contemporaneous measurements of stage and flow that span the typical range of flow conditions at the streamgage. 
+The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 active streamgages throughout the United States. Streamgages measure flow from the upstream basin, which is generally topographically defined by a watershed.  Computations are commonly based on continual measurements of stage at 10- to 60-minute intervals. The stage data is used to compute corresponding values of flow based on a empirical relation between stage and flow commonly referred to as a rating curve or table. The rating describes a monotonically increasing relation between stage and flow. This rating is developed and maintained on the basis of discrete, contemporaneous measurements of stage and flow that span the typical range of flow conditions at the streamgage. Discrete measurements require a field visit to the streamgage, which can be a major element in the cost of streamgage operation. 
 
-The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank hydraulic characteristics, or change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer a factor, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  
-
-The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the measurement frequency. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of hours to days during periods when no discrete flow measurements occur to identify the onset and cessation of these events. The frequency of discrete flow measurements is constrained by the cost of field visits. 
+The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank geometry and hydraulic characteristics. Alternatively, this relation can change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer present, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  Commonly both persistent and intermittent changes occur in the stage-flow rating.  The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the frequency of discrete measurements. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of hours to days during periods when no discrete flow measurements occur to identify the onset, cessation, or magnitude of backwater associated with these events. 
 
 ### Scope
 
-This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete flow measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow. Tracking intermittent changes requires more precise information on the timing of onset and cessation of the intermittent effects than is possible from discrete flow measurements.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
+This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow. Tracking intermittent changes requires more precise information on the timing of onset and cessation of the intermittent effects than is possible from discrete flow measurements alone.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
 
 
 ```{r setup, include=FALSE}
@@ -119,9 +117,10 @@ site_info %>%
 ```
 ### Study Area
 
-USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The basin has a drainage area of 681 mi^2^ at the streamgage. The basin is heavily forested and includes parts of the Huron-Manistee National Forest. Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020). The streamflow rating is commonly ice-affected during the winter months.
+USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The moderately sized basin has a drainage area of 681 mi^2^ at the streamgage. The basin is heavily forested and includes parts of the Huron-Manistee National Forest.  The city of Scottville, population 1,214, and the village of Baldwin, population 1,208,  (https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml, accessed Feb. 1, 2020), are the primary population centers in the basin.  Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020).
 
-This particular streamgage was selected because it has an extended period of streamflow measurements and records to support the analysis, which started in 1939 and has been operated continuous up to the time that this paper was published. In addition, it has shown a persistent (and conspicuous) monotonic trend in the stage-flow relation, and intermittent seasonal ice affects that increase the stage needed to pass an equal flow during open water conditions. The sand channel has shown considerable scour characteristics. For example, on Sept. 13, 1986, a high flow of 6,440 ft^3^/s was measured, with a streambed degradation of 1.55 ft. Four days later, a second discrete measurement flow measurement of 2,610 ft^3^/s was obtained, with a corrseponding streambed degradation of 4.06 ft [@holtschlag1998]. 
+This particular streamgage was selected because it has an extended period of streamflow measurements and records to support the analysis. In addition, the stage-flow relation has shown a persistent (and conspicuous) trend that generally enables a lower stage to pass a higher flow than earlier stage-flow relations generally indicate. In addition to the persistent trend, intermittent seasonal ice affects periodically increases the stage needed to pass a given flow than during open-water conditions. The sand channel has shown considerable scour potential. For example, on Sept. 13, 1986, a high flow of 6,440 ft^3^/s was measured at the streamgage, with a maximum local streambed scour of 1.55 ft. Four days later, a second discrete measurement flow measurement of 2,610 ft^3^/s was obtained, had maximum local streambed scour of 4.06 ft [@holtschlag1998]. The utility of the proposed approach for tracking changes in the stage-flow relation, however, is not thought to require such a conspicuous trend.  
+ 
 
 ```{r register_key, echo = FALSE,  results = 'hide', message = 'hide', warning = 'hide'}
 
@@ -222,12 +221,11 @@ flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
 ```
 
-***
+***  
 
-> Probability Distribution of Daily Flows
+#### Frequency-Magnitude Characteristics of Daily Flows  
 
-
-The empirical probability distribution describes the relative likelihood of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability distribution of the flows are asymmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a model to track changes in stage-flow relations.   
+The probability density describes the frequency characteristics of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability densities of the flows are asymmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a data transformation to track changes in stage-flow relations.   
 
 ```{r prob_den_flow, warning = FALSE }
 # Estimate parameters for lgamma3
@@ -250,23 +248,24 @@ flow_daily_pub %>%
   theme_bw() +
   scale_x_continuous( trans = 'log', breaks = c( 300, 500, 1000, 2000, 3000, 4000, 5000), limits = c(300, 5000) ) + 
   geom_vline( xintercept =  mean(flow_daily_pub$Flow), linetype = 'dashed') +
+  geom_vline( xintercept = c(345, 1460), linetype = 'dotted' ) +              
   annotate('text', x = 980, y = 0.2, label = paste0('Mean = ', format(mean(flow_daily_pub$Flow), digits = 0 ))) +
-  geom_line( data = gam3_df, aes( x = exp(gam3_seq), y = gam3_den), color = 'red' ) +
+  geom_line( data = gam3_df, aes( x = exp(gam3_seq), y = gam3_den), color = 'blue' ) +
   xlab('Flow, in cubic feet per second') +
   ylab('Probability density') +
-  annotate('text', x = 350, y = 1.12, label = 'Theoretical \\n Gamma Density', color = 'red', size = 3.8) +
+  annotate('text', x = 350, y = 1.12, label = 'Theoretical \n Gamma Density', color = 'blue', size = 3) +
   # annotate('text', x = exp(7.65), y = 1.09, label = paste0('dgamma3( shape = ', format( gam3_parm$estimate[1], digits = 4),
   #                                   ', scale = ', format( gam3_parm$estimate[2], digits = 4),
   #                                   ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
   annotate('segment', x = 450, y = 1.10, xend = 570, yend = 1.10, color = 'red' ) +
-  annotate('text', x = exp(6.26), y = 0.15, label = 'Empirical Density' ) +
-  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at \n Scottsdale, Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
+  annotate('text', x = 1250, y = 0.10, label = 'Empirical Density', size = 3 ) +
+  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at Scottsdale, \n Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
 
 ```
 
 ***
 
-### Discrete Flow Measurements
+### Discrete Stage and Flow Measurement Data
 
 ```{r read_discrete_meas_stage_flow, echo = FALSE,  warning = FALSE }
 
@@ -341,8 +340,9 @@ discrete_meas <- discrete_meas %>%
 ```
 
 
-Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes or variances of the flow. There may be a tendency, however, for minimum annual stages to trend downward during the period. In particular, annual minimum stage value in the 10-year period centered on 1990 seem to average about 1.5 ft. In contrast, annual minimum annual stage values in the 10-year period centered in 2015 seem to average about 0.5 ft lower. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. The decreasing trend in stage values not apparent in the loess regression line through all the range of data. 
+Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes or variances of the flow. There may be a tendency, however, for minimum annual stages to trend downward during the period. In particular, annual minimum stage value in the 10-year period centered on 1990 seem to average about 1.5 ft. In contrast, annual minimum annual stage values in the 10-year period centered in 2015 seem to average about 0.5 ft lower. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. The decreasing trend in stage values not apparent in the loess regression line through all the range of data.
 
+Two discrete measurements were removed from the analysis because they were considered to be outliers with respect to persistent changes in the stage-flow relation. Measurement number 474, obtained on Jan. 28, 1986, and measurement number 657 measured Dec. 11, 2013, were removed. Both measurement indicated the control type as 'Shore Ice,' but were indicating backwater departures from the rating relation more consistent with 'Ice Covered' measurements. The two measurements were qualified as 'fair', and 'poor,' respectively.  
 
 ```{r plot_discrete_data, message = FALSE }
 # Plot discrete Flow and Stage
@@ -369,12 +369,11 @@ discrete_meas %>%
 
 ```
 
+***  
 
-***
+#### Types of Controls and Accuracy Qualifiers  
 
-> Hydraulic Controls and Accuracy Qualifiers
-
-Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` summarizes the type of hydraulic control and the accuracy of discrete flow measurements provided by the qualifier. The most common hydraulic control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
+Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` summarizes the type of control and the accuracy of discrete flow measurements provided by the qualifier. The most common control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
 
 
 The qualifiers assigned to discrete flow measurements by hydrographers in the field were used to estimate uncertainties of the measured flows.  In this paper, a qualifier of 'Excellent' was associated with a standard error of 2 percent; 'Good,' with a standard error of 5 percent; 'Fair,' with a standard error of 8 percent; and 'Poor,' with a standard error of 12-percent. The associations are loosely based on the 'Discharge Measurement Quality Code' descriptions by USGS NWIS at https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code, accessed Jan. 18, 2020.   
@@ -401,7 +400,7 @@ table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
          col.names = c( 'Excellent', 'Good', 'Fair', 'Poor', 'Total') ) %>%
   kable_styling() %>% 
   add_header_above(c("Type of Control" = 1, "Discrete Flow Measurement Qualifier" = 4, ' '), align = 'center') %>% 
-  footnote('Discrete measurements with the type of control "Ice Cover" were subsequently deleted from the analysis because they did not reflect persistent changes in the stage-flow relation. Also, check measurements, which are repeated flow measurements on the same day to confirm the accuracy of the initially measured flow, were made on two days during the period of analysis. An average flow was computed from the two measurements to represent the discrete flow on that day. Thus, the total number of discrete flow measurements was reduced to 188.')
+  footnote('Discrete measurements with the type of control "Ice Cover" were subsequently deleted from the analysis because they did not reflect persistent changes in the stage-flow relation. Also, "check" measurements, which are repeated flow measurements on the same day to confirm the accuracy of the initially measured flow, were made on two days during the period of analysis. An average flow was computed from the two measurements to represent the discrete flow on that day.')
 
 # Remove ice cover measurements
 discrete_meas <- discrete_meas %>% 
@@ -427,9 +426,9 @@ df <- data.frame( 'days_between_measurements' = diff(discrete_meas$Date, 1))
 
 ***
 
-> Time Between Discrete Flow Measurements  
+#### Time Between Discrete Flow Measurements  
 
-The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 1)`.  There are no extended gaps in discrete flow measurements.  The four measurements at zero time between measurements are from check measurements made to ensure the initially measured flow. 
+The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 3)`.  There are no extended gaps in discrete flow measurements.  The four measurements at zero time between measurements are from check measurements made to ensure the initially measured flow. 
 
 
 ```{r days_between_meas, messages = FALSE, warning = FALSE } 
@@ -440,7 +439,7 @@ fig_no <- fig_no + 1
 # Plot the probability density of days between measurements
 df %>% 
   ggplot( aes( x = as.numeric(days_between_measurements) )) + 
-  geom_histogram( fill = 'black', alpha = 0.50, binwidth = 5 ) +
+  geom_histogram( fill = 'grey', alpha = 0.50, binwidth = 5 ) +
   theme_bw() +
   geom_vline( xintercept = mean(df$days_between_measurements), color = 'blue', linetype = 'dashed' ) +
   xlab( 'Time between flow measurements, in days' ) +
@@ -454,9 +453,17 @@ df %>%
 
 ***
 
-> Unit stage values per day
+### Continuous Stage Data  
 
-Until recently, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the availability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. In developing the approach, it would be helpful if a simple method were available to adapt to changing frequencies of unit value data. 
+Stage data is economically measured continually at streamgages using float sensors, bubble-gages, and pressure transducers [@rantz1982] to indicate water-surface elevations.  Elevations are commonly measured directly in feet above a gage datum, in which zero is some distance below the water-surface elevation at which zero streamflow occurs.  The zero of the gage datum is also referenced to a standard vertical datum.  For 04122500 Pere Marquette River at Scottville, Mich. the gage datum  is North American Vertical Datum of 1929 (NAVD29).  
+
+
+Until costs of electronic data storage moderated, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the accessability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. 
+
+
+#### Frequencies of Unit Stage Data
+
+In developing this approach, a simple method was used to adapt to changing frequencies or absent of unit (or daily) stage data. For periods when unit stage data was available, a daily mean value was computed from all unit stage data for that day. On days when no unit (or daily) stage data was available, the published daily mean flow was used with an inverse application of the applicable stage-flow rating to estimate a daily mean stage.   
 
 ```{r unit_daily_stage, warning = FALSE }
 
@@ -574,7 +581,7 @@ rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)),
 
 ```
 
-### Estimation of missing stage values
+#### Estimation of missing stage values
 
 A stage-flow relation is adapted by changing GAM parameters on the basis of discrete measurements of stage and flow.  Intervening measurements of stage, however, can be used to generate a set of basis functions (one for each knot) from an underlying GAM and used to compute the magnitudes and uncertainties of daily or unit streamflow. 
 
@@ -609,8 +616,8 @@ stage_missing <- approx( x = rating18$rated_flow, y = rating18$stage,
 
 # Estimated missing daily stage on the basis of published daily mean flow 
 df_stage_flow_allDays$stage_daily_mean[ ndx_miss ] <- stage_missing$y
-df_stage_flow_allDays$stage_miss               <- 'Measured'
-df_stage_flow_allDays$stage_miss[ ndx_miss ]   <- 'Estimated'
+df_stage_flow_allDays$stage_data               <- 'Measured'
+df_stage_flow_allDays$stage_data[ ndx_miss ]   <- 'Estimated'
 
 df_stage_flow_allDays <- addWaterYear(df_stage_flow_allDays)
 
@@ -622,7 +629,7 @@ min_Stage_group_waterYear <- df_stage_flow_allDays %>%
 
 fig_no <- fig_no + 1
 df_stage_flow_allDays[, ] %>% 
-  ggplot( aes( x = Date, y = stage_daily_mean, color = stage_miss )) +
+  ggplot( aes( x = Date, y = stage_daily_mean, color = stage_data )) +
   geom_point( size = 1 ) +
   geom_vline( xintercept = as.Date( c('1994-10-25', '2011-03-01', '2013-10-01')) , color = 'blue') + 
   # geom_line( data = min_Stage_group_waterYear, aes( x = minDate, y = minStage ), color = 'red') +
@@ -659,9 +666,9 @@ ndx_ian <- which( !is.na( df_stage_flow_allDays$stage_discrete_mea ) )
 
 fig_no <- fig_no + 1
 df_stage_flow_allDays[ ndx_ian, ] %>% 
-  mutate( stage_miss = factor( stage_miss, levels = c('Measured', 'Estimated'))) %>% 
+  mutate( stage_data = factor( stage_data, levels = c('Measured', 'Estimated'))) %>% 
   ggplot( aes( x = stage_discrete_mea, y = stage_daily_mean ) ) +
-  geom_point( aes( color = stage_miss, shape = stage_miss ), alpha = 1 ) +
+  geom_point( aes( color = stage_data, shape = stage_data ), alpha = 1 ) +
   theme_bw() +
   scale_x_log10( breaks = seq(1, 6, by = 1) ) +
   scale_y_log10( breaks = seq(1, 6, by = 1) ) +
@@ -769,7 +776,7 @@ rating_long %>%
 
 ### Cubic Regression Splines
 
-Cubic regression splines (CRSs) are piecewise polynomials with constraints to ensure continuity to the second derivative at interior knots and zero second derivates at the boundary knots [@Wood2006].  Individual polynomials are third order. Special constraints on the boundary knots ensures linear extrapolation beyond the domain of the stage data. CRS parameters were estimated within a generalized additive model (GAM) to flexibly represent the monotonically increasing relation between stage and flow. The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, statistics on model fit, and utility functions like matrix.model() and predict() for developing the CRSs within the R [@cite_R] programming environment. 
+Cubic regression splines (CRSs) are piecewise polynomials with constraints to ensure continuity to the second derivative at interior knots and zero second derivatives at the boundary knots [@Wood2006].  Individual polynomials are third order. Special constraints on the boundary knots ensures linear extrapolation beyond the domain of the stage data. CRS parameters were estimated within a generalized additive model (GAM) to flexibly represent the monotonically increasing relation between stage and flow. The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, statistics on model fit, and utility functions like matrix.model() and predict() for developing the CRSs within the R [@cite_R] programming environment. 
 
 A linear form of the CRS was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A second-order (quadratic) polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$ so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + e_i.$ Thus, a second order polynomial has three basis functions ${1, \ x, \ x^2}$ and three corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2}$.  According to [@Wood2017], a polynomial basis is a useful approximation when interest in on a specific point, however, splines are preferred when interest in the response (flow) is over the entire domain of stage. 
 
@@ -905,7 +912,7 @@ $$ R = \bar{r} = mean(R_t[qualifier]) $$
 $$ R = \hat{r} \: for \ all \ t, \ where \ \hat{r} \ is \ estimated \ in \ MARSS \ based \ on \ the \ discrete \ flow \ data. $$
 
 
-The design matrix ${Z}_{t}$ is a $10966\times 5$ array eries of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+The design matrix ${Z}_{t}$ is a $10966\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
 
 
 ## Results of Cubic Spline Regression and State-Space Modeling
@@ -1179,7 +1186,7 @@ colnames( gam_parameters_df ) <- c('18', '19', '20', '21' , 'POA',
 
 > Basis Functions 
 
-The basis functions developed using the GAM of the rating tables are plotted in figure `r fig_no + 1` along with the knot locations for each model and basis, excluding the (constant) intercept term.  The co-location of knots with peak magnitudes of the basis functions may result in parameter values associated with the knots being perturbed more when discrete measured stage-flow pairs are near a corresponding knot. The model.matrix function in the in mgcv software was used to extract the model or design matrix from the GAM object that results from model estimation.  
+The basis functions developed using the GAM of the rating tables are plotted in figure `r fig_no + 1` along with the knot locations for each model and basis, excluding the (constant) intercept term. The knots are co-located with peak magnitudes of the basis functions. Both the knot locations and the peaks in the basis functions occurred at lower stages for later basis functions. The model.matrix function in the in mgcv software was used to extract the design matrix from the GAM object that results from model estimation.  
 
 
 
@@ -1229,7 +1236,7 @@ basis_rat %>%
   facet_wrap(. ~ Basis, ncol = 2   ) +
   theme_bw() +
   theme( legend.position = 'bottom') +
-  ggtitle( paste0('Figure ', fig_no, '. Basis functions of cubic splines approximating selected ratings as a function of stage computed on the basis of discrete flow measurements'),
+  ggtitle( label = paste0('Figure ', fig_no, '. Basis functions of cubic splines approximating selected ratings as a function of stage computed on the basis of discrete flow measurements'),
            subtitle = 'Note: The basis0 equals 1 for all stages and was not included in the plots below' )                     
 
 
@@ -1347,7 +1354,8 @@ if( file.exists('marss_fit_Q_ones_multiplier_R_one_multiplier.rds') ){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_ones_multiplier_R_one_multiplier  <- MARSS(Yt, model = model.gen, control = list(maxit =  5000, trace = 1), 
-                                                         method = 'BFGS' ) 
+                                                         method = 'BFGS', 
+                                                         inits = coef(marss_fit_Q_ones_multiplier_R_one_multiplier) ) 
   write_rds(marss_fit_Q_ones_multiplier_R_one_multiplier, path = 'marss_fit_Q_ones_multiplier_R_one_multiplier.rds')
 }
 
@@ -1365,7 +1373,7 @@ if( file.exists('marss_fit_Q_unequal_scalars_R_one_multiplier.rds') ){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_unequal_scalars_R_one_multiplier  <- MARSS(Yt, model = model.gen, control = list(maxit =  5000, trace = 1), 
-                 method = 'BFGS')
+                 method = 'BFGS', inits = coef( marss_fit_Q_unequal_scalars_R_one_multiplier ))
   write_rds(marss_fit_Q_unequal_scalars_R_one_multiplier, path = 'marss_fit_Q_unequal_scalars_R_one_multiplier.rds')
 }
 
@@ -1385,7 +1393,7 @@ if( file.exists('marss_fit_Q_ones_multiplier_R_mean_qualifier.rds') ){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_ones_multiplier_R_mean_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
-                 method = 'BFGS')
+                 method = 'BFGS', inits = coef( marss_fit_Q_ones_multiplier_R_mean_qualifier ))
   write_rds(marss_fit_Q_ones_multiplier_R_mean_qualifier, path = 'marss_fit_Q_ones_multiplier_R_mean_qualifier.rds')
 }
 
@@ -1406,7 +1414,7 @@ if( file.exists('marss_fit_Q_ones_multiplier_R_mean_qualifier.rds') ){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_unconstrained_R_mean_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
-                 method = 'BFGS')
+                 method = 'BFGS', inits = coef( marss_fit_Q_unconstrained_R_mean_qualifier ))
   write_rds(marss_fit_Q_unconstrained_R_mean_qualifier, path = 'marss_fit_Q_unconstrained_R_mean_qualifier.rds')
 }
 
@@ -1427,7 +1435,7 @@ if( file.exists('marss_fit_Q_equalvarcov_R_mean_qualifier.rds') ){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_equalvarcov_R_mean_qualifier  <- MARSS(Yt, model = model.gen, 
-                                                     control = list(maxit =  1000, trace = 1, conv.test.slope.tol = 0.05), 
+                                                     control = list(maxit =  5000, conv.test.slope.tol = 0.05), 
                  method = 'kem',  inits = coef(marss_fit_Q_equalvarcov_R_mean_qualifier))
   write_rds(marss_fit_Q_equalvarcov_R_mean_qualifier, path = 'marss_fit_Q_equalvarcov_R_mean_qualifier.rds')
 }
@@ -1442,7 +1450,7 @@ if( file.exists('marss_fit_Q_equalvarcov_R_mean_qualifier.rds') ){
 
 # Standardize the diagonal of gam18_rating for estimation
 #  These standardized variance terms average 1 and form the diagonal of Q
-# gam18_diag_std <- diag(gam18_rating$Vp)/mean(diag(gam18_rating$Vp))
+gam18_diag_std <- diag(gam18_rating$Vp)/mean(diag(gam18_rating$Vp))
 
 if( file.exists( 'marss_fit_Q_covar_multiplier_R_one_multiplier.rds' )){
   marss_fit_Q_covar_multiplier_R_one_multiplier <- read_rds( 'marss_fit_Q_covar_multiplier_R_one_multiplier.rds' )
@@ -1460,7 +1468,8 @@ if( file.exists( 'marss_fit_Q_covar_multiplier_R_one_multiplier.rds' )){
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_covar_multiplier_R_one_multiplier  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
-                                                            method = 'BFGS')
+                                                            method = 'BFGS',
+                                                          inits = coef(marss_fit_Q_covar_multiplier_R_one_multiplier))
   
   write_rds(marss_fit_Q_covar_multiplier_R_one_multiplier, path = 'marss_fit_Q_covar_multiplier_R_one_multiplier.rds')
 }
@@ -1497,7 +1506,8 @@ if( file.exists( 'marss_fit_Q_covar_multiplier_R_mean_qualifier.rds' )){
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_covar_multiplier_R_mean_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
-                                                            method = 'BFGS')
+                                                            method = 'BFGS',
+                                                          inits = coef(marss_fit_Q_covar_multiplier_R_mean_qualifier))
   
   write_rds(marss_fit_Q_covar_multiplier_R_mean_qualifier, path = 'marss_fit_Q_covar_multiplier_R_mean_qualifier.rds')
 }
@@ -1505,7 +1515,7 @@ if( file.exists( 'marss_fit_Q_covar_multiplier_R_mean_qualifier.rds' )){
 
 ```
 
-
+summary(marss_fit_Q_covar_multiplier_R_mean_qualifier)
 
 ```{r marss_fit_Q_ones_multiplier_R_series_qualifier}
 
@@ -1528,7 +1538,7 @@ if ( file.exists( 'marss_fit_Q_ones_multiplier_R_series_qualifier.rds' )){
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_ones_multiplier_R_series_qualifier  <- MARSS(Yt, model = model.gen, method = 'kem',
                                          control = list(maxit =  1000, trace = 1, conv.test.slope.tol = 0.05),
-                                         inits = coef(marss_fit_QdiagEqual_Rseries))
+                                         inits = coef(marss_fit_Q_ones_multiplier_R_series_qualifier))
   
   write_rds(marss_fit_Q_ones_multiplier_R_series_qualifier, path = 'marss_fit_Q_ones_multiplier_R_series_qualifier.rds')
 }
@@ -1564,7 +1574,7 @@ if( file.exists( 'marss_fit_Q_covar_multiplier_R_series_qualifier.rds' )){
   model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
   
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
-  marss_fit_Q_covar_multiplier_R_series_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  3000, trace = 1, 
+  marss_fit_Q_covar_multiplier_R_series_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  4000, 
                                                             conv.test.slope.tol = 0.05), method = 'kem',
                       inits = coef(marss_fit_Q_covar_multiplier_R_series_qualifier))
   
@@ -1598,15 +1608,15 @@ marss_compare <- data.frame(
                     'series specified variance', 'series specified variance' ) ,
   'Method'         = c( 'BFGS', 'BFGS', 'BFGS', 'BFGS', 'kem', 'BFGS', 'BFGS', 'kem', 'kem' ),
   'Q_Process'      = format(c( 
-                            Model_01$par$Q, 
-                       mean(Model_02$par$Q),
-                            Model_03$par$Q, 
-                       mean(Model_04$par$Q),
-                       mean(Model_05$par$Q),
-                            Model_06$par$Q,
-                            Model_07$par$Q,
-                            Model_08$par$Q,
-                            Model_09$par$Q), digits = 4), 
+                       mean(diag(Model_01$par$Q)), 
+                       mean(diag(Model_02$par$Q)),
+                       mean(diag(Model_03$par$Q)), 
+                       mean(diag(Model_04$par$Q)),
+                       mean(diag(Model_05$par$Q)),
+                       mean(diag(Model_06$par$Q)),
+                       mean(diag(Model_07$par$Q)),
+                       mean(diag(Model_08$par$Q)),
+                       mean(diag(Model_09$par$Q))), digits = 4), 
   'R_Measurement'  = c(format(Model_01$par$R, digits = 4),
                        format(Model_02$par$R, digits = 4),
                        format(mean(df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2, digits = 4),
@@ -1677,7 +1687,7 @@ marss_compare %>%
 
 ```
 
-#### Expanded Results for Selected State Space Model
+## Application of the Selected State-Space Model
 
 ```{r eval_state_space}
 
@@ -1706,7 +1716,7 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 ```
 
 
-** Plot state vector parameter with time  **  
+### Changes in Cubic Spline Regression Parameters with Discrete Measurements    
 
 
 ```{r, state_parameter_matrix, fig.height = 9, fig.width = 9 }
@@ -1730,13 +1740,14 @@ marss_state_tT %>%
   ylab( 'State Estimates') +
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 1, Parameter ~ ., scales = 'free' ) +
-  ggtitle( paste0('Figure '.fig_no. '. Daily estimates of the state vector as parameters of the corresponding basis functions.') ,
+  ggtitle( label = paste0('Figure ', fig_no, '. Daily estimates of the state vector as parameters of the corresponding basis functions.') ,
            subtitle = 'Vertical lines indicate dates of discrete flow measurements.')
 
 
 
 ```
 
+### Stage-Flow Rating Adaptions with Discrete Measurements  
 
 
 ```{r adaptive_rating, fig.height = 16, fig.width = 9}
@@ -1807,6 +1818,10 @@ adaptive_rating_measDays %>%
 ```
 
 
+### Streamflow Magnitude and Uncertainty Computed by Kalman filter for the Selected State-Space Model  
+
+
+
 ```{r plot_daily_flow_se, fig.width = 12, fig.height = 20 }
 sel_yr <- seq(from = 1990, to = 2019, by = 3)
 
@@ -1832,6 +1847,21 @@ df_stage_flow_allDays %>%
 
 
 ```
+
+
+## Summary and Conclusions   
+
+Cubic Spline Regressions (CSRs) were developed in a generalized additive modelling environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of dicrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (R^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures was heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
+
+CSRs also were developed by use of paired stage-flow discrete measurement data obtained during the corresponding rating period. These regressions also approximated the  
+ 
+
+The Cubic Spline Regessions (CSRs) developed within a generalized additive modelling (GAM) framework provided a flexible and accurate method for estimating the stage-flow relation at a streamgage either directly from an expanded stage-flow rating table, or from discrete pairs of stage-flow measurements. The GAM environment produced a set of parameter estimates for the CSRs and a method for generating basis vectors from stage data.  The CSR parameters were used as the state vector in the state equation of a state-space model. The set basis vectors formed a design matrix that premultiplied the state vector in the measurement equation to compute flow.  The process variance matrix $Q$ in the state equation and measurement variance $R$ in the measurement equation were estimated by use of discrete measurements of stage and flow.  
+
+
+Conclusions  
+
+
 
 
 ```{r rating_updates, eval = FALSE, fig.height = 18, eval = FALSE, fig.width = 10}
@@ -1889,7 +1919,7 @@ ytT_DFM_df %>%
 
 
 ```
-## Appendix 1. Full printout of all estimated Generalized Additive Models (GAM)
+## Appendix 1. Full printout of all estimated Generalized Additive Models (GAM) for Ratings 18-21
 
 ** Summary output for the GAM using extended rating 18 data **
 
