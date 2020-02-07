@@ -248,8 +248,10 @@ flow_daily_pub %>%
   theme_bw() +
   scale_x_continuous( trans = 'log', breaks = c( 300, 500, 1000, 2000, 3000, 4000, 5000), limits = c(300, 5000) ) + 
   geom_vline( xintercept =  mean(flow_daily_pub$Flow), linetype = 'dashed') +
-  geom_vline( xintercept = c(345, 1460), linetype = 'dotted' ) +              
-  annotate('text', x = 980, y = 0.2, label = paste0('Mean = ', format(mean(flow_daily_pub$Flow), digits = 0 ))) +
+  geom_vline( xintercept = c(345, 1460), linetype = 'dotted' ) +  
+  annotate('text', x =  400, y = 0.925, label = '2.5% \nquantile \n = 403') +
+  annotate('text', x = 2100, y = 0.925, label = '97.5% quantile = 1680' ) +
+  annotate('text', x = 1000, y = 0.2, label = paste0('Mean = ', format(mean(flow_daily_pub$Flow), digits = 0 ))) +
   geom_line( data = gam3_df, aes( x = exp(gam3_seq), y = gam3_den), color = 'blue' ) +
   xlab('Flow, in cubic feet per second') +
   ylab('Probability density') +
@@ -1583,6 +1585,34 @@ if( file.exists( 'marss_fit_Q_covar_multiplier_R_series_qualifier.rds' )){
 
 ```
 
+```{r marss_fit_Q_diag_unequal_R_series_specified_var}
+
+# 10
+
+if ( file.exists( 'marss_fit_Q_diag_unequal_R_series_specified_var.rds' )){
+  marss_fit_Q_diag_unequal_R_series_specified_var <- read_rds( 'marss_fit_Q_diag_unequal_R_series_specified_var.rds' )
+} else {
+  Q = 'diagonal and unequal'  
+  
+  # Initialize measurement error vector with large variance for all days        # 'series_qualifier'
+  R  <- array(0, dim = c(1, 1, nrow(df_stage_flow_allDays)))
+  # Measurement variance specification
+  #   The standard error of flow as a percentage that varies with perceived accuracy of the measured flow
+  R[1,1, ndx_ian_Yt] <- (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2
+  
+  # Specify model
+  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  
+  # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
+  marss_fit_Q_diag_unequal_R_series_specified_var  <- MARSS(Yt, model = model.gen, method = 'kem',
+                            control = list(maxit =  2000, trace = 0, conv.test.slope.tol = 0.05),
+                            inits = marss_fit_Q_diag_unequal_R_series_specified_var)
+  
+  write_rds(marss_fit_Q_diag_unequal_R_series_specified_var, path = 'marss_fit_Q_diag_unequal_R_series_specified_var.rds')
+}
+```
+
+
 
 #### Summary of All State-Space Modeling Results 
 
@@ -1696,6 +1726,7 @@ marss_compare %>%
 # marss_fit <- marss_fit_QdiagEqual_RdiagEqual
 marss_fit   <- marss_fit_Q_ones_multiplier_R_series_qualifier
 marss_kf    <- MARSSkf( marss_fit )
+marss_kfss  <- MARSSkfss( marss_fit )
 # kfss function provids Innov, J, J0, Kt, Sigma, Vtt
 # marss_kfss  <- MARSSkfss( marss_fit )
   
@@ -1849,6 +1880,110 @@ df_stage_flow_allDays %>%
 ```
 
 
+```{r kalman_estimators, fig.height = 6, fig.width = 7}
+
+Z <- predict( gam18_rating, newdata = data.frame( stage = rating18$stage ),
+              type = 'lpmatrix')
+
+# marss_fit_Q_ones_multiplier_R_series_qualifier
+Zt <- t(predict( gam18_rating, newdata = data.frame( stage = df_stage_flow_allDays$stage_daily_mean),
+                 type = 'lpmatrix') )
+
+Zt <- array(Zt, dim = c(1, knts, nrow(df_stage_flow_allDays)))
+
+xtt1 <- marss_kfss$xtt1
+xtt  <- marss_kfss$xtt
+xtT  <- marss_kfss$xtT
+
+ytt1 <- matrix(NA, dim(xtt1))
+ytt  <- matrix(NA, dim(xtt))
+ytT  <- matrix(NA, dim(xtT))
+
+
+for (t in 1:nrow(df_stage_flow_allDays)){
+  ytt1[t] <- Zt[,,t] %*% xtt1[, t, drop = F]
+  ytt[t]  <- Zt[,,t] %*% xtt[ , t, drop = F]
+  ytT[t]  <- Zt[,,t] %*% xtT[ , t, drop = F]
+}
+
+# Measured values of flow
+ytt1_DFM  <- ytt1[ndx_DFM]
+ytt_DFM   <- ytt[ ndx_DFM]
+ytT_DFM   <- ytT[ ndx_DFM]
+
+ytm_DFM   <- log( df_stage_flow_allDays$flow_discrete_mea[ndx_DFM] )
+
+
+ett1_DFM  <- ytt1_DFM - ytm_DFM 
+ett_DFM   <- ytt_DFM  - ytm_DFM 
+etT_DFM   <- ytT_DFM  - ytm_DFM 
+
+df_DFM <- data.frame(Date = df_stage_flow_allDays$Date[ndx_DFM],
+                     ytm  = exp(ytm_DFM),
+                     ytt1 = exp(ytt1_DFM), ytt = exp(ytt_DFM), ytT = exp(ytT_DFM),
+                     ett1 = ett1_DFM, ett = ett_DFM, etT = etT_DFM )
+
+lmtt1 <- summary(with(df_DFM, lm(ytt1 ~ ytm)))
+lmtt  <- summary(with(df_DFM, lm(ytt  ~ ytm)))
+lmtT  <- summary(with(df_DFM, lm(ytT  ~ ytm)))
+```
+
+** Kalman Estimators **  
+Three Kalman estimates are include in this analysis: forecast $\hat{y}_{t}^{t-1}$ , filtered $\hat{y}_{t}^{t}$, and smoothed. $\hat{y}_{t}^{T}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
+ 
+Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average 56.6 days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervenning times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
+
+
+```{r  kalman_estimators_plt, fig.height = 6, fig.width = 7}
+fig_no <- fig_no + 1
+
+df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>% 
+  rename(Forecast = ytt1, Filtered = ytt, Smoothed = ytT) %>% 
+  gather(key = 'Kalman_estimator', value = 'Flow_cfs', Forecast, Filtered, Smoothed,
+         -Date, -ytm, factor_key = TRUE) %>% 
+  ggplot( aes( x = ytm, y = Flow_cfs, shape = Kalman_estimator )) +
+  geom_point( aes( color = Kalman_estimator )) +
+  scale_shape_manual( values = c(1, 3, 4)) +
+  scale_color_manual( values = c('red', 'olivedrab', 'slateblue1')) +
+  theme_bw() +
+  geom_abline( intercept = 0, slope = 1) +
+  scale_x_log10() +
+  scale_y_log10() +
+  labs(x = 'Discrete Flow Measurement, in cubic feet per second',
+       y = 'Kalman Estimate of Flow, in cubic feet per second') +
+  theme( legend.position = 'bottom' ) + 
+  ggtitle( label = paste0('Figure ', fig_no, '. Relation between measured discrete flow and Kalman estimates'))
+
+```
+
+** Kalman Estimation Errors **
+
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1} $, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T} $, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete fow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information availble the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
+
+
+```{r boxplot_err, fig.height = 6, fig.width = 7}
+
+fig_no <- fig_no + 1
+
+df_DFM[, c('Date', 'ett1', 'ett', 'etT')] %>% 
+  rename(Forecast = ett1, Filtered = ett, Smoothed = etT) %>% 
+  gather(key = 'Estimator', value = 'Flow_error_log', Forecast, Filtered, Smoothed,
+         -Date, factor_key = TRUE) %>% 
+  ggplot( aes( x = Estimator, y = Flow_error_log )) +
+  geom_boxplot() +
+  theme_bw() +
+  geom_hline( yintercept = 0, linetype = 'dashed' , color = 'salmon') +
+  xlab( 'Kalman Estimator' ) +
+  ylab( 'Difference between natural logarithms of \ndiscrete flow measurements and Kalman estimates') +
+  ggtitle( label = paste0('Figure ', fig_no, '. Boxplots comparing the distribution of errors in logarithms of flow for \n Kalman forecast, filtered, and smoothed estimates' ) )
+
+
+
+```
+
+
+
+
 ## Summary and Conclusions   
 
 Cubic Spline Regressions (CSRs) were developed in a generalized additive modelling environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of dicrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (R^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures was heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
@@ -1862,63 +1997,6 @@ The Cubic Spline Regessions (CSRs) developed within a generalized additive model
 Conclusions  
 
 
-
-
-```{r rating_updates, eval = FALSE, fig.height = 18, eval = FALSE, fig.width = 10}
-
-Z <- predict( gam18_rating, newdata = data.frame( stage = rating18$stage ),
-              type = 'lpmatrix')
-
-dim(Z)
-
-xtT_DFM <- marss_kf$xtT[, ndx_DFM ]
-
-dim( xtT_DFM )
-
-
-ytT_DFM <- Z %*% xtT_DFM
-
-ytT_DFM_vec <- matrix(exp(ytT_DFM), ncol = 1, byrow = TRUE)
-
-print(ytT_DFM[1:15, 1])
-
-print(ytT_DFM_vec[1:15])
-
-ytT_DFM_df <- data.frame( Date    = rep( df_stage_flow_allDays$Date[ ndx_DFM ], each = nrow(rating21)),
-                          stage   = rep( rating21$stage, length(ndx_DFM) ), 
-                          ytT     = ytT_DFM_vec)
-
-ytT_DFM_df <- addWaterYear( ytT_DFM_df )
-
-colnames(discrete_meas)[2] <- 'Date'
-
-
-tmp <- tmp_df %>% 
-  dplyr::filter( waterYear %in% sel_yr)
-
-
-ytT_DFM_df %>% 
-  dplyr::filter( waterYear %in% sel_yr ) %>%
-  ggplot( aes(x = ytT, y = stage, group = Date ), alpha = 0.25) +
-  geom_line(  aes( x = ytT, y = stage), size = 0.5, color = 'blue', alpha = 0.5) +
-  # geom_point( aes( x = discrete_meas$Date, y = discrete_meas$flow_discrete_mea, 
-  #        ), color = 'blue') +
-  labs(title = 'Date of Measurement:' ) + 
-  scale_x_log10() +
-  geom_point(data   = df_discrete_meas, 
-             aes( x = flow_discrete_mea, y = stage_discrete_mea, group = Date), 
-             color  = 'orange3', size = 3) +
-  theme_bw() +
-  facet_wrap( ~ waterYear, ncol = 2) +
-  theme( legend.position = 'right') +
-  xlab( 'Streamflow, in cubic feet per second' ) +
-  ylab( 'Stage, in feet above gage datum' ) + 
-  labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
-  geom_line( data = rating18, aes( x = rated_flow, y = stage, group = NULL), color = 'red', size = 1 ) +
-  geom_line( data = rating21, aes( x = rated_flow, y = stage, group = NULL), color = 'forestgreen', size = 1 )
-
-
-```
 ## Appendix 1. Full printout of all estimated Generalized Additive Models (GAM) for Ratings 18-21
 
 ** Summary output for the GAM using extended rating 18 data **
