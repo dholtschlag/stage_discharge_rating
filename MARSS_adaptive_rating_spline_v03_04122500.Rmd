@@ -441,8 +441,7 @@ df <- data.frame( Date = discrete_meas$Date[1:(nrow(discrete_meas)-2)],
 
 #### Time Between Discrete Flow Measurements  
 
-The frequency of discrete flow measurements is an important factor in detecting persistent and intermittent changes in the stage-flow rating, and in determining the costs of field operations.  During the period of analysis at Pere Marquette River, the mode of the distribution of time between discrete measurements was 42 (fig `r fig_no + 1`). There is some evidence from the plot that the frequency of measurements increased after 1993. There are no extended gaps in discrete flow measurements.  The two measurements at zero time between measurements are from check measurements made to ensure the initially measured flow.   
-
+The frequency of discrete flow measurements is an important factor in detecting persistent and intermittent changes in the stage-flow rating, and in determining the costs of field operations.  During the period of analysis at Pere Marquette River, the mode of the distribution of time between discrete measurements was 42 (fig `r fig_no + 1`). There is some evidence from the plot that the time between discrete measurements increased after 1993. There are no extended gaps in discrete flow measurements.  The two measurements at zero time between measurements are from check measurements made to ensure the initially measured flow.   
 
 
 ```{r days_between_meas, messages = FALSE, warning = FALSE } 
@@ -794,9 +793,9 @@ rating_long %>%
 
 Using a generalized additive modelling framework[@Wood2006], a cubic regression spline (CRS) is used to approximate either an existing rating or develop a new rating from a set of discrete stage-flow measurements.  Parameters of the CRS form the state vector of a state-space model, which is composed of a state equation and a measurement equation. In this analysis, the state-space model is computed at daily time steps.  
 
-The uncertainty of the state vector increases with time between measurements based on an estimated process variance matrix $Q$ within the state equation. The state vector is premultiplied by a set of basis functions with compatible length (computed as a function of stage), to estimate measured flow. On days when a discrete measurement occurs, the parameters in the state vector are updated to adapt the rating curve to reduce the differences between the estimated and measured flows, and to reduce the uncertainty described by the state covarinace matrix $V$.  
+The uncertainty of the state vector increases with time between measurements based on an estimated process variance matrix $Q$ within the state equation. The state vector is premultiplied by a set of basis functions with compatible length (computed as a function of stage), to estimate measured flow. On days when a discrete measurement occurs, the parameters in the state vector are updated to adapt the rating curve to reduce the differences between the estimated and measured flows, and to reduce the uncertainty described by the state covariance matrix $V$.  
 
-The remaining discrepencies between discrete measurements of flow and estimated flow, both in natural logarithmic units, are described by the measurement variance $R$ in the measurement equation. The value of $R$ can be specified or estimated iteratively. Once, $Q$ and $R$ are obtained, a set of CRS parameters can be obtained that sequentially adapt the rating curve based on each discrete flow measurement used in the analysis. In addition, a Kalman filter [@Simon2006] can be applied to estimate the magnitude and uncertainty of daily or unit flows based on daily or unit stages. Details of this process are described in the following paragraphs. 
+The remaining discrepancies between discrete measurements of flow and estimated flow, both in natural logarithmic units, are described by the measurement variance $R$ in the measurement equation. The value of $R$ can be specified or estimated iteratively. Once, $Q$ and $R$ are obtained, a set of CRS parameters can be obtained that sequentially adapt the rating curve based on each discrete flow measurement used in the analysis. In addition, a Kalman filter [@Simon2006] can be applied to estimate the magnitude and uncertainty of daily or unit flows based on daily or unit stages. Details of this process are described in the following paragraphs. 
 
 ### Cubic Regression Splines
 
@@ -804,7 +803,7 @@ Cubic regression splines (CRSs) are piecewise polynomials with constraints to en
 
 A linear form of the CRS was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A simple third-order (cubic) polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$, and $b_3 = x^3$, so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + x_i^3 \beta_3 + e_i.$ Thus, a third order polynomial has four basis functions ${1, \ x, \ x^2, \ x^3}$ and four corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2, \ \beta_3}$.  According to [@Wood2017], a polynomial basis is a useful approximation for a specific point, however, splines are preferred when interest in the response of flow is over the entire domain of stage. 
 
-CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage, while different numbers of knots may be more appropriate elsewhere. Five knots resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. The convention of placing the knots at quartiles of the data can be replaced with manual specification more consistent with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the response variable (flow).  
+CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage. Five knots resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. More generally, the *gam* function defaults to placing the interior knots at even quantiles of the data, but can be replaced with manual specification more consistent with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the response variable (flow).  
 
 The linear form of the basis functions used in the analysis can be written as:  
 
@@ -812,63 +811,55 @@ $$ flow(stage_i) = {\displaystyle \sum_{n=0}^{4} b_j(stage_i) \space \beta_j + \
 
 #### Specification of a Cubic Regression Spline within a Generalized Additive Modelling Framework
 
-Within the R package *mgcv*, the **gam** function produces a gam output object (gamObject) that contains the parameters, statistics, and input data of a gam model based on the function arguments describing the model structure and providing data for estimation. The object to the left of the tilde (~) is the response variable (rated_flow), the object to the right is the model specification, the data, and  
+Within the R package *mgcv*, the **gam** function produces a gam output object (gamObject) that contains the parameters, statistics, and input data of a gam model. The syntax below shows the arguments to the gam function, which describe the model structure, and provide data for estimation of model parameters and summary statistics.   
 
-gamObject <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),  
-                       data = data.frame( stage = ..., rated_flow = ... ), family = Gamma(link = log))  
+gamObject <- gam( flow        ~ s(stage,             bs = 'cr', k = knts),  
+                       data = data.frame( stage = ..., flow = ... ), family = Gamma(link = log))  
 
-
-** data = rated_flow**   the response variable of flow, in cubic feet per second  
 
 | Model Syntax            |  Explanation                                                                                              |  
 |:------------------------|:----------------------------------------------------------------------------------------------------------|  
 |: gamObject         |: The gam object produced as model output                                                                  |  
 |: gam( ... )         |: Function from the R package 'mgcv' used to specify the gam model                                         |     
 |:  ~                 |: Relational operator                                                                                      |  
-|: s( ... )           |: Function used in definition of smooth terms within gam model formula. The function does not evaluate    |  
-|:                        |:   A (spline) smooth - it exists purely to help set up a model using spline based smooths [@mgcv2019],    |  
+|: s( ... )           |: Function 's' is used to specify spline terms within gam model formula [@mgcv2019]. |  
 |: bs = 'cr'        |: bs is an input argument that accepts a code for the type of smoothing bases. The 'cr' indicates a CRS  |  
 |:                        |:    Cubic Regression Spline [@mgcv2019]                                                                         |  
-|: k = knts         |: k is an input argument for the number of knots, which IS variable knts that is assigned a value of 5     |    
-|: data = rating18  |: The dataframe used in the analysis, with partial listing below this table                                |  
-|: family = Gamma(link = log) |: This is a family object specifying the distribution and link (transformation) to use in fitting the GAM. Based 
-|:  |: on the distribution of daily mean flows, the Gamma distribution family following a natural logarithm transformation is a reasonable choice.| 
-|:   |:
+|: k = knts         |: k is an input argument for the number of knots, which is specified in this analysis as 5. The preferred number of knots may vary among streamgages. |    
+|: data = [rating | discrete pairs  |: The dataframe used in the analysis, with partial listing below this table                                |  
+|: family = Gamma(link = log) |: A family is a parametric set of probability distributions of a certain form. In this case, the gamma distribution, which is a member of the exponential family, may be appropriate because the distribution of the natural logarithms of daily mean flows is consistent with the gamma distribution. |
 
-```{r echo = FALSE}
+
+```{r echo = FALSE, eval = FALSE }
 print('First 6 rows of data in data.frame rating18')
 print( head( rating18 ))
 ```
 
-
-The *model.matrix* function can be used to create a design matrix $Z$ from a GAM object as: $Z$ = model.matrix([gamObject]). The gamObject can be any gam object that received input from the gam() function specifying the model structure and data contents. In this usage, the design matrix $Z has dimension T \times 5$ is composed of a set of 5 basis values for each stage value provided to the CRS model. In the case of a rating table, T corresponds to the number of rows in the extended rating table. In the case where a rating is developed by fitting discrete stage and flow measurements, *T* is the number of discrete measurements associated with the rating period. Alternately, the **predict** function can be used to create a design matrix $Z$ from a GAM object and a new R data.frame that have a variable named 'stage' as $Z = predict( [gamObject], newdata = data.frame( stage = ... ) )
-
-
+Once the gam model is estimated, the spline parameters (coefficients) and basis functions can be extracted from the gamObject. The spline parameters can be extracted using the function *coefficients* as coefficients( gamObject ). Two ways to extract the basis functions that form the design matrix $Z$ are presented. The *model.matrix* function can be used to extract the basis functions used in model development as $Z = $ model.matrix( gamObject ). In this case, a (design) matrix is returned with the number of rows equal to the number of observations in the data set used to estimate the gam model. The number of columns returned equals the number of knots in the spline.  The first column in the design matrix is a column of ones corresponding to the intercept. Alternatively, a design matrix can be obtained by use of the *predict* function, using the arguments $Z = $ predict( gamObject, newdata = data.frame( stage = ..., flow = ...), type = 'lpmatrix'  ). The *predict* function is a convenient way to generate basis functions for time series of unit or daily stage data used in computation of streamflow records, where *newdata* takes on time series  of stage (and flow) values. 
 
 ### State-Space Model
 
-A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, $V$ and the variance of the flow measurement $R$ [@marss2018]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
+A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *n* equal to the number of knots, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, $V$ and the variance of the flow measurement $R$ [@marss2018]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
 
 
 $$
 \begin{align}
-\text{ State Equation:  } \vec{x}_{t}  &= \: \vec{x}_{t-1} + \vec{w}_{t} && \text{where } \vec{w}_{t} \text{~} MVN(0, Q) \text{,}\\
+\text{ State Equation:  } \vec{x}_{t}  &= \: \vec{x}_{t-1} +  \vec{w}_{t} && \text{where } \vec{w}_{t} \text{~} MVN(0, Q) \text{,}\\
  \text{Measurement Equation:  } y_{t} &=     \vec{Z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t}) \text{,}\\
  \text{}
 \end{align}
 $$
 where $MVN(\vec0,Q)$ indicates a *Multi-Variate Normal* vector with mean $\vec{0}_{n}$, and process covariance $Q$.  
-Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and scalar or time series measurement variance $R_t$.  
+Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and scalar or time series measurement variance $R$ or $R_t$.  
 
 #### State Vector $\vec{x}_t$
 
-Vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots specified for the CRS. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk at a daily time step. The state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing value (NA) in the daily flow series $y_t$. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector. 
+Vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of corresponding to the number of knots specified for the CRS. The state equation forecasts the transition of the state vector from time $t-1$ to $t$ as a random walk. The state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector. 
 
-Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
 
 #### Measurement Time Series $y_t$
 
-The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated GAM model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of the increase in forecast uncertainty. In this analysis, $y_t$ vector was composed of mostly (97 percent) *NA* indicators. 
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated GAM model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of the increase in forecast uncertainty. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
 
 #### Process Covariance Matrix $Q$
 
@@ -883,6 +874,8 @@ Daily time steps were used in this paper because the most frequent time between 
 equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the CRS parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, $Q$ is unknown, but estimated as diagonal matrix in various forms. 
 
 In this paper, the process variance Q is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating GAM model, which is specified by the number of knots in the CRS. The covariance matrices took on four general forms that can be defined by special tags defined within the MARSS software [@marss2018]. These tags include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained,' in which the tag provides a shortcut string to define a particular form of the matrix. For example, in the model specification, the process covariance matrix can be explicitly defined as: 'Q = 'diagonal and equal' or explicitly as 'Q =  A custom form of Q is referred to in this paper as the 'std diagonal multiplier' form for standardized diagonal multiplier, but this nomenclature is not meaningful within the MARSS software. The diagonal forms are based on the assumption that changes in parameter values are independent. Estimation of off-diagonal terms, however, may be more consistent with covariance effects among parameters, and some of these forms are estimated and evaluated. The forms of these matrices are illustrated and discussed below. 
+
+##### Forms of Q
 
 *Diagonal and Equal Form of Q*
 
@@ -929,6 +922,33 @@ $$ R = \hat{r} \: for \ all \ t, \ where \ \hat{r} \ is \ estimated \ in \ MARSS
 
 
 The design matrix ${Z}_{t}$ is a $10966\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+
+#### Functions used in MARSS (Multivariate Autoregressive State-Space) Modelling 
+
+The function *MARSS* in the **MARSS** package is used to specify the model form and estimate parameters in a state-space model. The syntax of the function *MARSS* is provided below. Arguments to the *MARSS* function that are shown in square brackets have options.  The first option indicated is the default. 
+
+marssObject <- MARSS( Yt, model = list(Z = Zt, A = 'zero', R = R, U = 'zero', Q = Q, x0 = X0, V0 = V0, tinitx=0 ), 
+                 control = list( maxit = [ 500 | > 500 ], trace = [0 | 1], conv.test.slope.tol = [0.5 | <0.5] ),
+                 method  = [ 'kem' | 'BFGS' ], inits = coef( marssObject0 ). 
+
+
+| Model Syntax            |  Explanation                                                                                              |  
+|:------------------------|:----------------------------------------------------------------------------------------------------------|  
+|: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{t}^T$ and its standard error  See [@marss2018] for a complete description of the contents of the marssObject.                                                        |  
+|: MARSS( ... )         |: The *MARSS* function is from the R package  **MARSS** and is used to specify the model form and estimate parameters                                         |     
+|:  Yt                 |: Yt is an daily time series of the natural logarithms of discrete flow measurements. On days without discrete measurements Yt is missing (NA). In this analysis, Yt is 98.3 percent missing values.                                                                                         |  
+|: A, U           |: The A and U vectors are components of the measurement and state equations, respectively, and need to be specified as 'zero' in the model statement, but are nuisance parameters in the context of this analysis. |  
+|: R        |: R is the measurement error variance and can be a scalar or time series and can be specified or estimated.  |  
+|:                        |:    Cubic Regression Spline [@mgcv2019]                                                                         |  
+|: x0         |: x0 is the initial value of the state vector. In this analysis, it is based on the parameters of the GAM model for rating 18, which was used as the initial rating condition. |    
+|: data = [rating | discrete pairs  |: The dataframe used in the analysis, with partial listing below this table                                |  
+|: V0 |: V0 is the initial value for the state covariance matrix. In this analysis, it was estimated as 1000 times the covariance matrix of parameters in rating 18 estimated by a GAM model. Because the stage-flow data in rating 18 did not include measurement uncertainty, the GAM covariance matrix is unrealistically small. If the covariance is too small, information from discrete measurements will have little effect on the state vector; if the covariance is too large, the state vector might initially change too much in response to discrete flow measurements. It is possible to let the state covariance matrix be estimated entirely from the discrete flow measurements. |
+|: tinitx=0 |: The tinitx sets the initial state vector to apply at time zero, just before the first time step with data.  
+
+
+
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
+
 
 
 ## Results of Cubic Spline Regression and State-Space Modeling
@@ -1346,14 +1366,13 @@ $$
 \end{align}
 $$
 
-Following notation by [@MARSS2018], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained 97 percent *not available* indicators. 
+Following notation by [@MARSS2018], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained 98.3 percent *not available* indicators. 
 
 $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots and subsequent parameters specified in the generalized additive model (GAM) CRS equation. Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output.  These include *xtT*, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt* is the filter estimate of the state vector at time *t* given information up to time *t*; and *xtt1* is the predicted state at time *t* given information up to time *t-1*. 
 
 Q is a $5\times5$ diagonal process variance matrix, which increments the variance *V* of the state vector with each time step in the model.  In the state equation, the process variance indicates the incremental increase in variance of CRS  parameters associated with each day since a discrete measurement of flow occurred. The elements of Q are estimated in the Multivariate Autoregressive State Space (MARSS) model .  To simulate unit flows, the diagonal elements of the Q matrix would be divided by the number of unit values in a day.     
 
 R  is an estimated constant measurement variance
-
 
 
 ### State-Space Modeling Results
@@ -1428,7 +1447,7 @@ if( file.exists('marss_fit_Q_ones_multiplier_R_mean_qualifier.rds') ){
   Q <- 'unconstrained'                                                    # 'ones_multiplier'
   # R is specified by qualifiers of discrete flow measurement              
   R  <- matrix(mean( (df_stage_flow_allDays$se_pct[ndx_ian_Yt]/100)^2),1,1)    # 'mean_qualifier'
-  model.gen=list(Z=Zt,A=A,R=R,U=U,Q=Q,x0=X0,V0=V0,tinitx=0)
+  model.gen=list(Z=Zt,A='zero',U='zero',R=R,Q=Q,x0=X0,V0=V0,tinitx=0)
   # Refit model: trace = 1 provides parameter etimates with each iteration with the corresponding log-likelihood
   marss_fit_Q_unconstrained_R_mean_qualifier  <- MARSS(Yt, model = model.gen, control = list(maxit =  1000, trace = 1), 
                  method = 'BFGS', inits = coef( marss_fit_Q_unconstrained_R_mean_qualifier ))
@@ -2069,7 +2088,15 @@ summary(gamPOA_measPair)
 
 ```{r Model_05, echo = FALSE}
 
-print( marss_fit_Q_equalvarcov_R_mean_qualifier)
+if ( file.exists( 'marss_fit_Q_equalvarcov_R_mean_qualifierCI.rds' )){
+  marss_fit_Q_equalvarcov_R_mean_qualifierCI <- read_rds( 'marss_fit_Q_equalvarcov_R_mean_qualifierCI.rds' )
+} else {
+ marss_fit_Q_equalvarcov_R_mean_qualifierCI  <- MARSSparamCIs( marss_fit_Q_equalvarcov_R_mean_qualifier)
+  
+  write_rds(marss_fit_Q_equalvarcov_R_mean_qualifierCI, path = 'marss_fit_Q_equalvarcov_R_mean_qualifierCI.rds')
+}
+print( marss_fit_Q_equalvarcov_R_mean_qualifierCI )
+
 
 ```
 
@@ -2077,7 +2104,16 @@ print( marss_fit_Q_equalvarcov_R_mean_qualifier)
 
 ```{r Model_03, echo = FALSE}
 
-print(marss_fit_Q_ones_multiplier_R_mean_qualifier)
+if ( file.exists( 'marss_fit_Q_ones_multiplier_R_mean_qualifierCI.rds' )){
+  marss_fit_Q_ones_multiplier_R_mean_qualifierCI <- read_rds( 'marss_fit_Q_ones_multiplier_R_mean_qualifierCI.rds' )
+} else {
+ marss_fit_Q_ones_multiplier_R_mean_qualifierCI  <- MARSSparamCIs( marss_fit_Q_ones_multiplier_R_mean_qualifier)
+  
+  write_rds(marss_fit_Q_ones_multiplier_R_mean_qualifierCI, path = 'marss_fit_Q_ones_multiplier_R_mean_qualifierCI.rds')
+}
+print( marss_fit_Q_ones_multiplier_R_mean_qualifierCI )
+
+
 
 ```
 
@@ -2085,7 +2121,14 @@ print(marss_fit_Q_ones_multiplier_R_mean_qualifier)
 
 ```{r Model_07, echo = FALSE}
 
-print(marss_fit_Q_covar_multiplier_R_mean_qualifier)
+if ( file.exists( 'marss_fit_Q_covar_multiplier_R_mean_qualifierCI.rds' )){
+  marss_fit_Q_covar_multiplier_R_mean_qualifierCI <- read_rds( 'marss_fit_Q_covar_multiplier_R_mean_qualifierCI.rds' )
+} else {
+ marss_fit_Q_covar_multiplier_R_mean_qualifierCI  <- MARSSparamCIs( marss_fit_Q_covar_multiplier_R_mean_qualifier)
+  
+  write_rds(marss_fit_Q_covar_multiplier_R_mean_qualifierCI, path = 'marss_fit_Q_covar_multiplier_R_mean_qualifierCI.rds')
+}
+print( marss_fit_Q_covar_multiplier_R_mean_qualifierCI )
 
 ```
 
@@ -2093,7 +2136,14 @@ print(marss_fit_Q_covar_multiplier_R_mean_qualifier)
 
 ```{r Model_04, echo = FALSE}
 
-print(marss_fit_Q_unconstrained_R_mean_qualifier)
+if ( file.exists( 'marss_fit_Q_unconstrained_R_mean_qualifierCI.rds' )){
+  marss_fit_Q_unconstrained_R_mean_qualifierCI <- read_rds( 'marss_fit_Q_unconstrained_R_mean_qualifierCI.rds' )
+} else {
+ marss_fit_Q_unconstrained_R_mean_qualifierCI  <- MARSSparamCIs( marss_fit_Q_unconstrained_R_mean_qualifier)
+  
+  write_rds(marss_fit_Q_unconstrained_R_mean_qualifierCI, path = 'marss_fit_Q_unconstrained_R_mean_qualifierCI.rds')
+}
+print( marss_fit_Q_unconstrained_R_mean_qualifierCI )
 
 ```
 
@@ -2101,14 +2151,29 @@ print(marss_fit_Q_unconstrained_R_mean_qualifier)
 
 ```{r Model_06, echo = FALSE}
 
-print(marss_fit_Q_covar_multiplier_R_one_multiplier)
+if ( file.exists( 'marss_fit_Q_covar_multiplier_R_one_multiplierCI.rds' )){
+  marss_fit_Q_covar_multiplier_R_one_multiplierCI <- read_rds( 'marss_fit_Q_covar_multiplier_R_one_multiplierCI.rds' )
+} else {
+ marss_fit_Q_covar_multiplier_R_one_multiplierCI  <- MARSSparamCIs( marss_fit_Q_covar_multiplier_R_one_multiplier)
+  
+  write_rds(marss_fit_Q_covar_multiplier_R_one_multiplierCI, path = 'marss_fit_Q_covar_multiplier_R_one_multiplierCI.rds')
+}
+print( marss_fit_Q_covar_multiplier_R_one_multiplierCI )
+
 
 ```
 
 ** Results for MARSS Model with Q 'diagonal and unequal' and R 'diagonal and equal' **
 ```{r Model_02, echo = FALSE}
 
-print(marss_fit_Q_unequal_scalars_R_one_multiplier)
+if ( file.exists( 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds' )){
+  marss_fit_Q_unequal_scalars_R_one_multiplierCI <- read_rds( 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds' )
+} else {
+ marss_fit_Q_unequal_scalars_R_one_multiplierCI  <- MARSSparamCIs( marss_fit_Q_unequal_scalars_R_one_multiplier)
+  
+  write_rds(marss_fit_Q_unequal_scalars_R_one_multiplierCI, path = 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds')
+}
+print( marss_fit_Q_unequal_scalars_R_one_multiplierCI )
 
 ```
 
@@ -2116,7 +2181,14 @@ print(marss_fit_Q_unequal_scalars_R_one_multiplier)
 
 ```{r Model_01, echo = FALSE}
 
-print(marss_fit_Q_ones_multiplier_R_one_multiplier)
+if ( file.exists( 'marss_fit_Q_ones_multiplier_R_one_multiplierCI.rds' )){
+  marss_fit_Q_ones_multiplier_R_one_multiplierCI <- read_rds( 'marss_fit_Q_ones_multiplier_R_one_multiplierCI.rds' )
+} else {
+ marss_fit_Q_ones_multiplier_R_one_multiplierCI  <- MARSSparamCIs( marss_fit_Q_ones_multiplier_R_one_multiplier)
+  
+  write_rds(marss_fit_Q_ones_multiplier_R_one_multiplierCI, path = 'marss_fit_Q_ones_multiplier_R_one_multiplierCI.rds')
+}
+print( marss_fit_Q_ones_multiplier_R_one_multiplierCI )
 
 ```
 
@@ -2125,7 +2197,14 @@ print(marss_fit_Q_ones_multiplier_R_one_multiplier)
 
 ```{r Model_09, echo = FALSE}
 
-print(marss_fit_Q_covar_multiplier_R_series_qualifier) 
+if ( file.exists( 'marss_fit_Q_covar_multiplier_R_series_qualifierCI.rds' )){
+  marss_fit_Q_covar_multiplier_R_series_qualifierCI <- read_rds( 'marss_fit_Q_covar_multiplier_R_series_qualifierCI.rds' )
+} else {
+ marss_fit_Q_covar_multiplier_R_series_qualifierCI  <- MARSSparamCIs( marss_fit_Q_covar_multiplier_R_series_qualifier)
+  
+  write_rds(marss_fit_Q_covar_multiplier_R_series_qualifierCI, path = 'marss_fit_Q_covar_multiplier_R_series_qualifierCI.rds')
+}
+print( marss_fit_Q_covar_multiplier_R_series_qualifierCI )
 
 ```
 
@@ -2134,7 +2213,14 @@ print(marss_fit_Q_covar_multiplier_R_series_qualifier)
 
 ```{r Model_08, echo = FALSE}
 
-print(marss_fit_Q_ones_multiplier_R_series_qualifier)  
+if ( file.exists( 'marss_fit_Q_ones_multiplier_R_series_qualifierCI.rds' )){
+  marss_fit_Q_ones_multiplier_R_series_qualifierCI <- read_rds( 'marss_fit_Q_ones_multiplier_R_series_qualifierCI.rds' )
+} else {
+ marss_fit_Q_ones_multiplier_R_series_qualifierCI  <- MARSSparamCIs( marss_fit_Q_ones_multiplier_R_series_qualifier)
+  
+  write_rds(marss_fit_Q_ones_multiplier_R_series_qualifierCI, path = 'marss_fit_Q_ones_multiplier_R_series_qualifierCI.rds')
+}
+print( marss_fit_Q_ones_multiplier_R_series_qualifierCI )
 
 ```
 
