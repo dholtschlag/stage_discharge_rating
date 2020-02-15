@@ -1,5 +1,5 @@
 ---
-title: "A State-Space Model for Adaptive Stage-Discharge Rating Estimation using Discrete Flow Measurements"
+title: "Adapting rating curves for persistent changes in stage-flow relations and characterizing uncertainties of streamflow records with discrete measurements"
 author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
@@ -20,9 +20,11 @@ The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 
 
 The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank geometry and hydraulic characteristics. Alternatively, this relation can change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer present, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  Commonly both persistent and intermittent changes occur in the stage-flow rating.  The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the frequency of discrete measurements. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of hours to days during periods when no discrete flow measurements occur to identify the onset, cessation, or magnitude of backwater associated with these events. 
 
-### Scope
+### Purpose and Scope
 
-This paper describes the preliminary development and testing of an automated approach for estimating a stage-flow relation for a streamgage that sequentially adapts to persistent changes in rating conditions based on discrete measurement data. A persistent change is considered to be a slow change in rating conditions relative to the frequency of discrete measurements available to characterize the change. Adaptive tracking can be applied in real-time, considering only past discrete measurements, or offline, considering discrete flow information before and after the time of estimation. Only offline tracking is presented in the paper.  Implementation of the technique requires continual stage data and discrete flow data for implementation. In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those due to ice-affected streamflow. Tracking intermittent changes requires more precise information on the timing of onset and cessation of the intermittent effects than is possible from discrete flow measurements alone.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
+The purpose of this paper is to outline an approach for automatically adapting streamflow rating curves for persistent changes in stage-flow relations based on discrete stage-flow measurements. The approach also enables the estimation of the magnitudes and uncertainties of unit streamflow records. A persistent change refers to a gradual change in rating conditions where the frequency of discrete measurements are adequate to approximate the beginning and ending of the changes in rating conditions. The adaptive approach can be applied in real-time by considering only past or current discrete measurements, or offline, considering discrete flow measurements before and after the time of estimation. An implementation strategy and example application are provided, while recognizing that refinements and conventions will likely be needed for routine applications.  
+
+In contrast to persistent changes, intermittent changes represent sudden changes in rating conditions that may be associated with transient effects like those changes in rating conditions associated with backwater due to ice formation in the channel. Tracking intermittent changes requires more precise information on the timing of the onset and cessation of the intermittent effects than is generally possible from discrete flow measurements.  Intermittent changes may benefit from analysis of multiple streamgages in a network, but is beyond the scope of this study. 
 
 
 ```{r setup, include=FALSE}
@@ -117,9 +119,11 @@ site_info %>%
 ```
 ### Study Area
 
-USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (fig. 1). The Pere Marquette River drains a basin in the west central lower peninsula of Michigan.  The moderately sized basin has a drainage area of 681 mi^2^ at the streamgage. The basin is heavily forested and includes parts of the Huron-Manistee National Forest.  The city of Scottville, population 1,214, and the village of Baldwin, population 1,208,  (https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml, accessed Feb. 1, 2020), are the primary population centers in the basin.  Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020).
+USGS streamgage 04122500 Pere Marquette River at Scottville, Mich. was selected for this study. (fig. 1). The Pere Marquette River drains a basin of 681 mi^2^ in the west central lower peninsula of Michigan. The basin is generally forest covered, which includes parts of the Huron-Manistee National Forest.  The city of Scottville, population 1,214, and the village of Baldwin, population 1,208,  (https://factfinder.census.gov/faces/nav/jsf/pages/community_facts.xhtml, accessed Feb. 1, 2020), are the primary population centers in the basin.  Streamflow has been computed continuously at the site starting in August 1939 and was active at the time of this paper (October 2020).
 
-This particular streamgage was selected because it has an extended period of streamflow measurements and records to support the analysis. In addition, the stage-flow relation has shown a persistent (and conspicuous) trend that generally enables a lower stage to pass a higher flow than earlier stage-flow relations generally indicate. In addition to the persistent trend, intermittent seasonal ice affects periodically increases the stage needed to pass a given flow than during open-water conditions. The sand channel has shown considerable scour potential. For example, on Sept. 13, 1986, a high flow of 6,440 ft^3^/s was measured at the streamgage, with a maximum local streambed scour of 1.55 ft. Four days later, a second discrete measurement flow measurement of 2,610 ft^3^/s was obtained, had maximum local streambed scour of 4.06 ft [@holtschlag1998]. The utility of the proposed approach for tracking changes in the stage-flow relation, however, is not thought to require such a conspicuous trend.  
+The Pere Marquette streamgage was selected because it has an extended period of data to support the analysis.  Electronically accessible records include unit (shorter than daily interval) stage data beginning in October 1989, to present. Daily mean streamflow data is available from April 1939 to present. Paired stage-flow (discrete) measurements obtained during field visits is available electronically beginning in August 1985. In addition, extended (0.01-ft interval) stage-flow rating tables (ratings), used to compute unit flow values, are electronically accessible.  For this study, ratings 18, 19, 20, and 21, were used, corresponding to the period from October 1986 to October 2019. These rating show a persistent (and conspicuous) trend that generally enabled a lower stage to pass a higher flow than earlier stage-flow relations generally indicate. In particular, rating 21 passes 55.1 percent more flow than rating 18 at 1.4 ft of stage. This increase diminishes to 12.3 percent more flow at 8.0 ft of stage.  
+
+Persistent changes in stage-flow relation at 04122500 Pere Marquette River at Scottville, Mich., may be related to streambed stability. In particular, the sand channel has shown considerable scour potential. For example, on Sept. 13, 1986, a high flow of 6,440 ft^3^/s was measured at the streamgage, with a maximum local streambed scour of 1.55 ft. Four days later, a second discrete flow measurement of 2,610 ft^3^/s was obtained in which a maximum local streambed scour of 4.06 ft was measured [@holtschlag1998]. The utility of the proposed approach for tracking changes in the stage-flow relation, however, is not thought to require such a conspicuous trend. In addition to the persistent trend, intermittent seasonal ice affects periodically increases the stage needed to pass a given flow than during open-water conditions.  
  
 
 ```{r register_key, echo = FALSE,  results = 'hide', message = 'hide', warning = 'hide'}
@@ -190,12 +194,11 @@ vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4,
 
 ## Data Components
 
-Continual streamflow data are commonly computed on the basis of continual stage data, and an empirical relation between stage and flow. The continual intervals are generally less than an hour in length, and are referred to as unit data.  The relation between stage and flow is based on periodic discrete stage and flow measurements obtained during a field visit to the streamgage. A set of discrete measurements is used to manually define a curvilinear relation between stage and flow over an extended stage range. The stage-flow relation is commonly referred to as a rating curve or table. Discrete measurements continue throughout the period of streamgage operation to confirm, update, extend, and revise the stage-flow relation as needed accurately compute streamflow. 
+This section discusses data required for implementation of the adaptive stage-flow rating approach. Continual streamflow data are commonly computed on the basis of continual stage data, and an empirical relation between stage and flow. The continual intervals are generally less than or equal to an hour in length, and are referred to as unit data.  The relation between stage and flow is based on periodic discrete stage and flow measurements obtained during a field visit to the streamgage. A set of discrete measurements is used to manually define a curvilinear relation between stage and flow over an extended stage range. The stage-flow relation is commonly referred to as a rating curve or table. Discrete measurements continue throughout the period of streamgage operation to confirm, update, extend, and revise the stage-flow relation as needed accurately compute streamflow. Major changes in the stage-flow relations are indicated by (generally integer) changes in the rating number.   
 
-Several data components are critical in computing unit streamflow, and derivative products, such as daily (mean) streamflow. Daily streamflow is the primary streamflow statistic used in many water-resource applications. Daily streamflow is commonly used, for example, to compute flow-duration and high- and low-frequency characteristics widely used in design and decision making. Therefore, daily streamflow was the first streamflow statistic to be accessible electronically. 
+Several data components are critical in computing unit streamflow, and derivative products, such as daily (mean) streamflow. Daily streamflow is the primary streamflow statistic used in many water-resource applications. Daily streamflow is commonly used, for example, to compute flow-duration and high- and low-frequency characteristics widely used in design and decision making. Therefore, daily streamflow data were the first streamflow statistic to be accessible electronically and generally has the longest period of record.  
 
-Historically, unit stage and flow  values have been considered ancillary data of secondary importance to daily streamflow. High cost of electronic store of these data were prohibitive. More recently, however, both unit stage and flow data has been stored in accessible formats along with information on discrete flow measurements. Ready access to these data have been a limiting factor in developing the analysis presented in this paper. 
-
+Historically, unit stage and flow values have been considered ancillary data of secondary importance to daily streamflow. High cost of electronic storage of these data were prohibitive. More recently, however, both unit stage and unit flow data has been stored in accessible formats along with information on discrete stage-flow measurements. Ready access to these data have been instrumental in developing the analysis presented in this paper. 
 
 ### Daily Streamflow
 
@@ -225,7 +228,7 @@ flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
 #### Frequency-Magnitude Characteristics of Daily Flows  
 
-The probability density describes the frequency characteristics of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis varied from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability densities of the flows are asymmetric (right skewed). The natural logarithm of flows, however, is consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a data transformation to track changes in stage-flow relations.   
+The probability density curves describes the frequency characteristics of daily flow magnitudes.  Daily flows at Pere Marquette River during the period of analysis ranged from `r flow_hpdi[[1]]` and `r flow_hpdi[[2]]` ft^3^/s, 95-percent of the time.  The minimum and maximum daily flows during this period were `r min(flow_daily_pub$Flow)` and `r max(flow_daily_pub$Flow)`, respectively. The mean flow was 787 ft^3^/s. The probability densities of the flows are asymmetric (right skewed). The natural logarithms of flows, however, are consistent with a three parameter gamma distribution (fig. 2). This distribution is an important consideration in specifying a data transformation to track changes in stage-flow relations.   
 
 ```{r prob_den_flow, warning = FALSE }
 # Estimate parameters for lgamma3
@@ -339,14 +342,19 @@ discrete_meas <- discrete_meas %>%
   dplyr::select( 'Date', 'measurement_nu', 'stage_discrete_mea', 'flow_discrete_mea', 'qualifier', 
                  'control_type', 'rating_no', 'period_of_analysis', 'se_pct', 'se_flow') %>% 
   addWaterYear()
+
+
+lm_lflow <-  summary( lm( log10(discrete_meas$flow_discrete_mea) ~ discrete_meas$Date  ) )
+
+lm_lstage <- summary( lm( log10(discrete_meas$stage_discrete_mea) ~ discrete_meas$Date ) )
+
 ```
 
 
-Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes or variances of the flow. There may be a tendency, however, for minimum annual stages to trend downward during the period. In particular, annual minimum stage value in the 10-year period centered on 1990 seem to average about 1.5 ft. In contrast, annual minimum annual stage values in the 10-year period centered in 2015 seem to average about 0.5 ft lower. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. The decreasing trend in stage values not apparent in the loess regression line through all the range of data.
+Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes of the logarithms of flows (*p* = `r format( lm_lflow$coefficients[2,4], digits = 4)`). There is, however, a statistically significant negative trend (*p* = `r format( lm_lstage$coefficients[2,4], digits = 4)`) in the logarithms of stage during the period. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. 
 
-Two discrete measurements were removed from the analysis because they were considered to be outliers with respect to persistent changes in the stage-flow relation. Measurement number 474, obtained on Jan. 28, 1986, and measurement number 657 measured Dec. 11, 2013, were removed. Both measurement indicated the control type as 'Shore Ice,' but were indicating backwater departures from the rating relation more consistent with 'Ice Covered' measurements. The two measurements were qualified as 'fair', and 'poor,' respectively.  
 
-```{r plot_discrete_data, message = FALSE }
+```{r plot_discrete_data, message = FALSE, fig.height = 6 }
 # Plot discrete Flow and Stage
 fig_no <- fig_no + 1
 discrete_meas %>% 
@@ -355,10 +363,11 @@ discrete_meas %>%
                  Stage = stage_discrete_mea ) %>% 
   gather( 'Parameter', 'Magnitude',  -Date ) %>% 
   ggplot( aes( x = Date, y = Magnitude, group = Parameter ) ) +
-  geom_point() +
+  geom_point( method = 'gam') +
   facet_grid( Parameter ~ ., scales = 'free_y' )  +
   theme_bw() +
-  geom_smooth() +
+  geom_smooth( method = 'lm') +
+  scale_y_log10( ) +
   scale_x_date( breaks =        seq(as.Date("1985/1/1"), as.Date("2020/1/1"), by = "5 years"),
                 labels = format(seq(as.Date("1985/1/1"), as.Date("2020/1/1"), by = "5 years"), '%Y')) +
   # geom_vline( xintercept = c(date_beg_model, date_end_model), linetype = 'dashed') +
@@ -377,6 +386,7 @@ discrete_meas %>%
 
 Discrete flow measurement data for Pere Marquette River occurring during the period of analysis were retrieved from the USGS National Water Information System (NWIS) using the R package dataRetrieval [@DeCicco2019]. Table `r tab_no + 1` summarizes the type of control and the accuracy of discrete flow measurements provided by the qualifier. The most common control conditions were a 'Clear Channel', and the most common measurement accuracy qualifier was 'Good.'  
 
+Two discrete measurements were removed from the analysis because they were considered to be outliers with respect to persistent changes in the stage-flow relation. Measurement number 474, obtained on Jan. 28, 1986, and measurement number 657 measured Dec. 11, 2013, were removed. Both measurement indicated the control type as 'Shore Ice,' but were indicating backwater departures from the rating relation more consistent with 'Ice Covered' measurements. The two measurements were qualified as 'fair', and 'poor,' respectively.  
 
 The qualifiers assigned to discrete flow measurements by hydrographers in the field were used to estimate uncertainties of the measured flows.  In this paper, a qualifier of 'Excellent' was associated with a standard error of 2 percent; 'Good,' with a standard error of 5 percent; 'Fair,' with a standard error of 8 percent; and 'Poor,' with a standard error of 12-percent. The associations are loosely based on the 'Discharge Measurement Quality Code' descriptions by USGS NWIS at https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code, accessed Jan. 18, 2020.   
   
@@ -420,7 +430,8 @@ ndx_rat <- which(discrete_meas$measurement_nu > 478 & discrete_meas$measurement_
 discrete_meas$rating_no[ ndx_rat ] <- 18
 
 # Compute time between consequtive flow measurements
-df <- data.frame( 'days_between_measurements' = diff(discrete_meas$Date, 1))
+df <- data.frame( Date = discrete_meas$Date[1:(nrow(discrete_meas)-2)],
+                  'days_between_measurements' = diff(discrete_meas$Date, 1)[1:(nrow(discrete_meas)-2)])
 
 
 
@@ -430,7 +441,8 @@ df <- data.frame( 'days_between_measurements' = diff(discrete_meas$Date, 1))
 
 #### Time Between Discrete Flow Measurements  
 
-The frequency of discrete flow measurements is an important factor in detecting persistent changes in the stage-flow rating and in determining the costs of field operations. During the period of analysis at Pere Marquette River, the mean time between discrete measurements was `r format(mean(df$days_between_measurements), digits = 3)`.  There are no extended gaps in discrete flow measurements.  The four measurements at zero time between measurements are from check measurements made to ensure the initially measured flow. 
+The frequency of discrete flow measurements is an important factor in detecting persistent and intermittent changes in the stage-flow rating, and in determining the costs of field operations.  During the period of analysis at Pere Marquette River, the mode of the distribution of time between discrete measurements was 42 (fig `r fig_no + 1`). There is some evidence from the plot that the frequency of measurements increased after 1993. There are no extended gaps in discrete flow measurements.  The two measurements at zero time between measurements are from check measurements made to ensure the initially measured flow.   
+
 
 
 ```{r days_between_meas, messages = FALSE, warning = FALSE } 
@@ -438,18 +450,21 @@ The frequency of discrete flow measurements is an important factor in detecting 
 # Increment figure counter
 fig_no <- fig_no + 1
 
-# Plot the probability density of days between measurements
-df %>% 
-  ggplot( aes( x = as.numeric(days_between_measurements) )) + 
-  geom_histogram( fill = 'grey', alpha = 0.50, binwidth = 5 ) +
+p <- df %>% 
+  ggplot( aes( x = Date, y = days_between_measurements)) +
+  geom_point( ) +
   theme_bw() +
-  geom_vline( xintercept = mean(df$days_between_measurements), color = 'blue', linetype = 'dashed' ) +
-  xlab( 'Time between flow measurements, in days' ) +
-  ylab( 'Probability Density') +
-  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n streamgage 04122500 Pere River at Scottville, MI from', date_beg_model, 'to', date_end_model),
+  xlab( 'Date' ) +
+  ylab( 'Time between flow measurements, in days' ) +
+  ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n streamgage 04122500 Pere River at Scottville, MI'),
           subtitle = 'Bin widths include 5 days.') +
-  annotate('text', x = 49, y = 25.5, label = paste0('Mean = ', format(mean(df$days_between_measurements), digits = 3) , 
-                                                    ' days'), hjust = -0.25, vjust = 0, color = 'blue')
+  annotate('segment', x = as.Date('1985-01-01'), xend = as.Date('2020-01-01'),
+                      y = 43.5,                  yend = 43.5, 
+           color = 'blue', linetype = 'dashed') +
+  annotate('text', x = as.Date('1986-01-01'), y = 50, label = 'Mode: 42', color = 'blue') 
+
+  suppressMessages( ggExtra::ggMarginal(p, type = "histogram", margins = 'y') )
+  # geom_rug( size = 0.05, sides = 'r' )
 
 ```
 
@@ -457,15 +472,17 @@ df %>%
 
 ### Continuous Stage Data  
 
-Stage data is economically measured continually at streamgages using float sensors, bubble-gages, and pressure transducers [@rantz1982] to indicate water-surface elevations.  Elevations are commonly measured directly in feet above a gage datum, in which zero is some distance below the water-surface elevation at which zero streamflow occurs.  The zero of the gage datum is also referenced to a standard vertical datum.  For 04122500 Pere Marquette River at Scottville, Mich. the gage datum  is North American Vertical Datum of 1929 (NAVD29).  
+Stage is generally measured continually at streamgages using float sensors, bubble-gages, or pressure transducers [@rantz1982] to indicate water-surface elevations.  Elevations are commonly measured directly in feet above a gage datum, in which zero is some distance below the water-surface elevation at which zero streamflow occurs.  The zero of the gage datum is also referenced to a standard vertical datum.  For 04122500 Pere Marquette River at Scottville, Mich. the gage datum  is North American Vertical Datum of 1929 (NAVD29).  
+
+Unit and daily stage data were considered primarily as instrumental variables in the computation of unit and daily flows. Thus, the accessibility of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  
 
 
-Until costs of electronic data storage moderated, unit and daily stage data were considered ancillary variables to the computation of unit and daily flows. Thus, the accessability of historical unit and daily stage data is more limited than daily flow data. In particular, limitations in the availability of historical stage data constrained the start of the period of analysis utilized in this paper.  In addition, the number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities in unit values occurred during the period of analysis. 
+#### Frequencies of Unit Stage Data  
 
+The number of unit values recorded per day varied during the period of analysis (fig. `r fig_no + 1`). From about October 1, 1989 to May 4, 1994, 24 values per day was common; from May 5, 1994 to February 21, 1997, 288 values per day (5-minute interval data) were common; and after February 21, 1997, 96 values per day (15-minute interval data) were common. Other small irregularities associated with missing unit values occurred during the period of analysis at all measurement frequencies.  
 
-#### Frequencies of Unit Stage Data
+In developing this approach, a simple method was used to adapt to changing frequencies or absent of unit (or daily) stage data. For periods when unit stage data was available, a daily mean value was computed from all unit stage data for that day. On days when no unit (or daily) stage data was available, the published daily mean flow was used with an inverse application of the stage-flow rating to estimate a daily mean stage. This allowed model computations at daily time steps rather than (possibly variable) unit time steps substantially increasing the speed of parameter estimation in the model.   
 
-In developing this approach, a simple method was used to adapt to changing frequencies or absent of unit (or daily) stage data. For periods when unit stage data was available, a daily mean value was computed from all unit stage data for that day. On days when no unit (or daily) stage data was available, the published daily mean flow was used with an inverse application of the applicable stage-flow rating to estimate a daily mean stage.   
 
 ```{r unit_daily_stage, warning = FALSE }
 
@@ -652,7 +669,7 @@ df_stage_flow_allDays[, ] %>%
 
 ***
 
-> Stage values used in modeling
+### Stage values used in modeling
 
 Figure `r fig_no + 1 ` shows the close correspondence  between discrete stage on days of field measurements and daily mean stage computed from unit values.  Only one estimated stage occurred on a day of a discrete measurement. For the purpose of modeling flows and tracking the changes in the stage-flow relation, daily mean stages were replace with measured discrete stages on days of field measurement so that even the small discrepancy between discrete stage measurements and daily mean stage did not degrade modeling accuracy.  
 
@@ -700,9 +717,9 @@ ndx_stage <- which( as.Date(stage_unit$dateTime) == as.Date('1992-07-22') )
 
 ***
 
-### Historical Stage-Flow Ratings 
+### Selected Stage-Flow Ratings 
 
-Historical Stage-Flow Ratings were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table 2 showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the corresponding interval when the ratings were applied. 
+Stage-flow ratings 18-21 were retrieved from USGS NWIS data bases using Aquarius Time-Series Software [@Aquarius2017]. The expanded form of the ratings 18-21 were exported in column format. The expanded rating indicate the relation between stage and flow at 0.01 ft increments of gage height. Table `r tab_no + 1` showing the starting and ending dates for each of the selected ratings and the number of discharge measurements in the corresponding interval when the ratings were applied. 
 
 
 ```{r rating_history, fig.width = 5 }
@@ -726,14 +743,14 @@ suppressMessages(tmp <- discrete_meas %>%
 tmp %>% 
   dplyr::filter( !is.na( rating_no )) %>% 
   kable( caption = paste0('Table ', tab_no, '. Number of discrete flow measurements during selected rating periods at streamgage 04122500 Pere Marquette River at Scottville, Mich. during the period of analysis '),
-         col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of discrete measurements')) %>% 
-  kable_styling( full_width = FALSE) %>% 
+         col.names = c('Rating number', 'Starting date', 'Ending date', 'Number of \n discrete \n measurements')) %>% 
+  kable_styling( full_width = F, position = 'left') %>% 
   column_spec(1, width = '6em' ) %>% 
   column_spec(2, width = '6em' ) %>% 
   column_spec(3, width = '6em' ) %>% 
-  column_spec(4, width = '6em' ) %>% 
-  add_header_above( c('Rating Period' = 3, ' ') ) %>% 
-  footnote('Discrete measurements that were obtained during the rating period were included in the number of count of discrete measurements for that rating. Discrete measurement 479 and 480, which occurred on Sept. 13, 1986, and Sept. 17, 1986, were included in rating period 18 because they were associated with the maximum stage measured at the streamgage.')
+  column_spec(4, width = '3em' ) %>% 
+  add_header_above( c('Rating Period' = 3, ' ') ) 
+  # footnote('Discrete measurements that were obtained during the rating period were included in the number of count of discrete measurements for that rating. Discrete measurement 479 and 480, which occurred on Sept. 13, 1986, and Sept. 17, 1986, were included in rating period 18 because they were associated with the maximum stage measured at the streamgage.')
 
 
 
@@ -742,10 +759,10 @@ tmp %>%
 
 ***
 
-> Plot Historical Stage-Flow Ratings with corresponding discrete measurements
+#### Plot of selected stage-flow ratings with corresponding discrete measurements
 
 
-Figure `r fig_no + 1` shows historical rating curves 18-21 and corresponding discrete flow measurements during the selected rating periods.  A persistent shift to the right is evident in the plot indicating higher rates of flow are discharged at the same stage as time increases. The historical rating curves that were developed manually track these changes closely.  
+Figure `r fig_no + 1` shows historical rating curves 18-21 and corresponding discrete flow measurements during the selected rating periods.  A persistent shift to the right is evident in the plot indicating higher rates of flow are discharged at the same stage as time increases. The historical rating curves that were developed manually track these changes closely. Ratings 18 and 21 are generally parallel and provide the left and right boundaries for rated flows during the selected period of analysis, while ratings 18 and 19 are more irregular. Specifically, ratings 19 and 20 are well separated at flows less than 2,800 ft^3^/s, but converge at greater flows. The two essentially identical ratings then and converge with rating 18 at the 6,500 ft^3^/s and 8.1 ft of stage.  Ratings 20 and 21 are nearly overlapping at flows less than 2,000 ft^3^/s. Rating 21 shows a sharp decrease in slope at about 1,700 ft^3^/s, and crosses rating 20. Rating 21 continues to 7,300 ft^3^/s at 8.1 ft of stage, perhaps to account for the highest measured flow of about 4,850 ft^3^/s during the period of analysis. At 8.1 ft of stage, rating 18, 19, and 20 indicate a flow of 6,500 ft^3^/s, while rating 21 indicates a flow of 7,300 ft^3^/s, or about 12.3 percent more flow than ratings 18-20. 
 
 
 ```{r plot_ratings_meas, fig.width = 9, fig.height = 8,}
@@ -775,30 +792,30 @@ rating_long %>%
 
 ## Methods for Adapting Stage-Flow Rating to Sequential Discrete Flow Measurements
 
+Using a generalized additive modelling framework[@Wood2006], a cubic regression spline (CRS) is used to approximate either an existing rating or develop a new rating from a set of discrete stage-flow measurements.  Parameters of the CRS form the state vector of a state-space model, which is composed of a state equation and a measurement equation. In this analysis, the state-space model is computed at daily time steps.  
+
+The uncertainty of the state vector increases with time between measurements based on an estimated process variance matrix $Q$ within the state equation. The state vector is premultiplied by a set of basis functions with compatible length (computed as a function of stage), to estimate measured flow. On days when a discrete measurement occurs, the parameters in the state vector are updated to adapt the rating curve to reduce the differences between the estimated and measured flows, and to reduce the uncertainty described by the state covarinace matrix $V$.  
+
+The remaining discrepencies between discrete measurements of flow and estimated flow, both in natural logarithmic units, are described by the measurement variance $R$ in the measurement equation. The value of $R$ can be specified or estimated iteratively. Once, $Q$ and $R$ are obtained, a set of CRS parameters can be obtained that sequentially adapt the rating curve based on each discrete flow measurement used in the analysis. In addition, a Kalman filter [@Simon2006] can be applied to estimate the magnitude and uncertainty of daily or unit flows based on daily or unit stages. Details of this process are described in the following paragraphs. 
 
 ### Cubic Regression Splines
 
 Cubic regression splines (CRSs) are piecewise polynomials with constraints to ensure continuity to the second derivative at interior knots and zero second derivatives at the boundary knots [@Wood2006].  Individual polynomials are third order. Special constraints on the boundary knots ensures linear extrapolation beyond the domain of the stage data. CRS parameters were estimated within a generalized additive model (GAM) to flexibly represent the monotonically increasing relation between stage and flow. The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, statistics on model fit, and utility functions like matrix.model() and predict() for developing the CRSs within the R [@cite_R] programming environment. 
 
-A linear form of the CRS was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A second-order (quadratic) polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$ so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + e_i.$ Thus, a second order polynomial has three basis functions ${1, \ x, \ x^2}$ and three corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2}$.  According to [@Wood2017], a polynomial basis is a useful approximation when interest in on a specific point, however, splines are preferred when interest in the response (flow) is over the entire domain of stage. 
+A linear form of the CRS was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A simple third-order (cubic) polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$, and $b_3 = x^3$, so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + x_i^3 \beta_3 + e_i.$ Thus, a third order polynomial has four basis functions ${1, \ x, \ x^2, \ x^3}$ and four corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2, \ \beta_3}$.  According to [@Wood2017], a polynomial basis is a useful approximation for a specific point, however, splines are preferred when interest in the response of flow is over the entire domain of stage. 
 
-CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage. This resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. The convention of placing the knots at quartiles of the data can be replaced with manual specification more consistent with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the response variable (flow).  
+CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage, while different numbers of knots may be more appropriate elsewhere. Five knots resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. The convention of placing the knots at quartiles of the data can be replaced with manual specification more consistent with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the response variable (flow).  
 
-The linear basis function used in the analysis is written below:
+The linear form of the basis functions used in the analysis can be written as:  
 
 $$ flow(stage_i) = {\displaystyle \sum_{n=0}^{4} b_j(stage_i) \space \beta_j + \varepsilon_i} $$
 
-> Specification of a Generalized Additive Model for Rating Curve 18  
+#### Specification of a Cubic Regression Spline within a Generalized Additive Modelling Framework
 
-** Model specification in the R statistical computing environment: **    
-
-function **gam**
 Within the R package *mgcv*, the **gam** function produces a gam output object (gamObject) that contains the parameters, statistics, and input data of a gam model based on the function arguments describing the model structure and providing data for estimation. The object to the left of the tilde (~) is the response variable (rated_flow), the object to the right is the model specification, the data, and  
-
 
 gamObject <- gam( rated_flow        ~ s(stage,             bs = 'cr', k = knts),  
                        data = data.frame( stage = ..., rated_flow = ... ), family = Gamma(link = log))  
-
 
 
 ** data = rated_flow**   the response variable of flow, in cubic feet per second  
@@ -823,48 +840,45 @@ print('First 6 rows of data in data.frame rating18')
 print( head( rating18 ))
 ```
 
-function **model.matrix()**  
-The *model.matrix* function can be used to create a design matrix $Z$ from a GAM object as: $Z$ = model.matrix([gamObject]). 
-The gamObject can be any gam object that received input from the gam() function specifying the model structure and data contents. In this usage, the design matrix $Z has dimension T \times 5$ is composed of a set of 5 basis values for each stage value provided to the CRS model. In the case of a rating table, T corresponds to the number of rows in the extended rating table. In the case where a rating is developed by fitting discrete stage and flow measurements, *T* is the number of discrete measurements associated with the rating period. 
 
-function **predict**  
-The **predict** function can be used to create a design matrix $Z$ from a GAM object and a new R data.frame that have a variable named 'stage': $Z = predict( [gamObject], )
+The *model.matrix* function can be used to create a design matrix $Z$ from a GAM object as: $Z$ = model.matrix([gamObject]). The gamObject can be any gam object that received input from the gam() function specifying the model structure and data contents. In this usage, the design matrix $Z has dimension T \times 5$ is composed of a set of 5 basis values for each stage value provided to the CRS model. In the case of a rating table, T corresponds to the number of rows in the extended rating table. In the case where a rating is developed by fitting discrete stage and flow measurements, *T* is the number of discrete measurements associated with the rating period. Alternately, the **predict** function can be used to create a design matrix $Z$ from a GAM object and a new R data.frame that have a variable named 'stage' as $Z = predict( [gamObject], newdata = data.frame( stage = ... ) )
 
 
- 
 
 ### State-Space Model
 
-A state-space model consists of two equations: a process or state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, *V* and the variance of the flow measurement *R* [@marss2018]. The two equations are solved alternately, starting with the state equation, and iteratively through time indexed by $t.$  The state-space model is written below:
+A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *n*, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, $V$ and the variance of the flow measurement $R$ [@marss2018]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
 
 
 $$
 \begin{align}
 \text{ State Equation:  } \vec{x}_{t}  &= \: \vec{x}_{t-1} + \vec{w}_{t} && \text{where } \vec{w}_{t} \text{~} MVN(0, Q) \text{,}\\
- \text{Measurement Equation:  } y_{t} &=     \vec{Z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t = t'}) \text{,}\\
+ \text{Measurement Equation:  } y_{t} &=     \vec{Z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t}) \text{,}\\
  \text{}
 \end{align}
 $$
-where $MVN(\vec0,Q)$ indicates a *Multi-Variate Normal* vector with mean $\vec{0}_{n}$, and process variance $Q$.  
-Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and measurement variance $R$.  
+where $MVN(\vec0,Q)$ indicates a *Multi-Variate Normal* vector with mean $\vec{0}_{n}$, and process covariance $Q$.  
+Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and scalar or time series measurement variance $R_t$.  
 
-> State Vector $\vec{x}_t$
+#### State Vector $\vec{x}_t$
 
-The vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of parameters specified in the CRS. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk. This implies that the state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing values (NA) in the flow series $y_t$. The variance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) after discrete measurements in the measurement equation. 
+Vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots specified for the CRS. The state equation models the transition of the state vector from time $t-1$ to $t$ as a random walk at a daily time step. The state-vector is invariant between discrete flow measurements, when the measurement update is skipped because of missing value (NA) in the daily flow series $y_t$. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector. 
 
 Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
 
-> Measurement Time Series $y_t$
+#### Measurement Time Series $y_t$
 
-The scalar measurement time series $y_t$ has a length equal to the number of days () in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated GAM model. The natural logarithm is used in $y_t$ to help ensure that $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector or the state covariance matrix. In this analysis, $y_t$ vector was composed of mostly (97 percent) *not available* indicators. 
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated GAM model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of the increase in forecast uncertainty. In this analysis, $y_t$ vector was composed of mostly (97 percent) *NA* indicators. 
 
-> Process Covariance Matrix $Q$
+#### Process Covariance Matrix $Q$
 
-The random process noise vector $\vec{w}_t$ is assumed to have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and fixed covariance $Q$.  The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006]. The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. 
+The random process noise vector $\vec{w}_t$ is assumed to have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and fixed covariance $Q$.  The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
 
-The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$ If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
+The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2018], the maximum likelihood estimates of $Q$ and $R$ are biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
 
-Daily time steps were used in this paper because the time between discrete flow measurements averaged 58 days. On average, therefore, there is one measurement update for each 58 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@marss2018] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for simulation. 
+The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
+
+Daily time steps were used in this paper because the most frequent time between discrete flow measurements was 42 days. On average, therefore, there is one measurement update for each 42 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@marss2018] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for simulation. 
 
 equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the CRS parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, $Q$ is unknown, but estimated as diagonal matrix in various forms. 
 
@@ -1315,6 +1329,7 @@ X0 <- as.matrix( as.numeric(coefficients(gam18_rating)), 5, 1)
 # Initial covariance of the state model
 V0 <- gam18_rating$Vp * 1000
 
+# V0 <- V0 - diag(V0) + c(1,1,1,1,.1) * diag(V0)
 
 ```
 The R package MARSS [@MARSS2018] was used in developing the state-space model. The notation below follows the authors' notation. 
@@ -1784,7 +1799,7 @@ marss_state_tT %>%
 ```{r adaptive_rating, fig.height = 16, fig.width = 9}
 # Design matrix for allDays
 
-sel_yr <- seq(from = 1990, to = 2019, by = 3)
+sel_yr <- seq(from = 1992, to = 2019, by = 3)
 
 # Design matrix formed with from Rating 18 basis functions using the stage range in Rating 21
 #   The range in stage is the widest range of stage (0.53 - 8.10 ft)
@@ -1931,7 +1946,7 @@ lmtT  <- summary(with(df_DFM, lm(ytT  ~ ytm)))
 ** Kalman Estimators **  
 Three Kalman estimates are include in this analysis: forecast $\hat{y}_{t}^{t-1}$ , filtered $\hat{y}_{t}^{t}$, and smoothed. $\hat{y}_{t}^{T}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
  
-Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average 56.6 days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervenning times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
+Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average 56.6 days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
 
 
 ```{r  kalman_estimators_plt, fig.height = 6, fig.width = 7}
@@ -1958,7 +1973,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1} $, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T} $, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete fow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information availble the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1} $, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T} $, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
@@ -1986,7 +2001,7 @@ df_DFM[, c('Date', 'ett1', 'ett', 'etT')] %>%
 
 ## Summary and Conclusions   
 
-Cubic Spline Regressions (CSRs) were developed in a generalized additive modelling environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of dicrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (R^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures was heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
+Cubic Spline Regressions (CSRs) were developed in a generalized additive modelling environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of discrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (R^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures was heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
 
 CSRs also were developed by use of paired stage-flow discrete measurement data obtained during the corresponding rating period. These regressions also approximated the  
  
