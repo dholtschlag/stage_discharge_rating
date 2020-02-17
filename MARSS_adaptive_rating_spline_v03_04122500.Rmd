@@ -351,7 +351,7 @@ lm_lstage <- summary( lm( log10(discrete_meas$stage_discrete_mea) ~ discrete_mea
 ```
 
 
-Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes of the logarithms of flows (*p* = `r format( lm_lflow$coefficients[2,4], digits = 4)`). There is, however, a statistically significant negative trend (*p* = `r format( lm_lstage$coefficients[2,4], digits = 4)`) in the logarithms of stage during the period. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. 
+Figure `r fig_no + 1` shows a time series plot of discrete flow and stage measurements during the period for which these data were electronically accessible. There are no apparent trends in the magnitudes of the logarithms of flows (*p* = `r format( lm_lflow$coefficients[2,4], digits = 4)`). There is, however, a statistically significant negative trend (*p* = `r format( lm_lstage$coefficients[2,4], digits = 4)`) in the logarithms of stage during the period. Given the apparent lack of trend in discrete flow values, the lowering of the minimum water levels may be the result of channel degradation. There appears to be some visual evidence that the variability of stage values is increasing during the period of analysis.  
 
 
 ```{r plot_discrete_data, message = FALSE, fig.height = 6 }
@@ -865,7 +865,7 @@ The scalar measurement time series $y_t$ has a length equal to the number of day
 
 The random process noise vector $\vec{w}_t$ is assumed to have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and fixed covariance $Q$.  The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
 
-The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2018], the maximum likelihood estimates of $Q$ and $R$ are biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
+The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
 
 The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
 
@@ -873,7 +873,7 @@ Daily time steps were used in this paper because the most frequent time between 
 
 equation, and the reduction in variance in measurement equation $V_t^+$. If the process variance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the CRS parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process variance divided by 96 is suggested as a suitable estimate of the unit process variance. In this analysis, $Q$ is unknown, but estimated as diagonal matrix in various forms. 
 
-In this paper, the process variance Q is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating GAM model, which is specified by the number of knots in the CRS. The covariance matrices took on four general forms that can be defined by special tags defined within the MARSS software [@marss2018]. These tags include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained,' in which the tag provides a shortcut string to define a particular form of the matrix. For example, in the model specification, the process covariance matrix can be explicitly defined as: 'Q = 'diagonal and equal' or explicitly as 'Q =  A custom form of Q is referred to in this paper as the 'std diagonal multiplier' form for standardized diagonal multiplier, but this nomenclature is not meaningful within the MARSS software. The diagonal forms are based on the assumption that changes in parameter values are independent. Estimation of off-diagonal terms, however, may be more consistent with covariance effects among parameters, and some of these forms are estimated and evaluated. The forms of these matrices are illustrated and discussed below. 
+In this paper, the process variance Q is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating GAM model, which is specified by the number of knots in the CRS. The covariance matrices took on four general forms that can be defined by special tags defined within the MARSS software [@marss2020b]. These tags include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained,' in which the tag provides a shortcut string to define a particular form of the matrix. For example, in the model specification, the process covariance matrix can be explicitly defined as: 'Q = 'diagonal and equal' or explicitly as 'Q =  A custom form of Q is referred to in this paper as the 'std diagonal multiplier' form for standardized diagonal multiplier, but this nomenclature is not meaningful within the MARSS software. The diagonal forms are based on the assumption that changes in parameter values are independent. Estimation of off-diagonal terms, however, may be more consistent with covariance effects among parameters, and some of these forms are estimated and evaluated. The forms of these matrices are illustrated and discussed below. 
 
 ##### Forms of Q
 
@@ -934,21 +934,21 @@ marssObject <- MARSS( Yt, model = list(Z = Zt, A = 'zero', R = R, U = 'zero', Q 
 
 | Model Syntax            |  Explanation                                                                                              |  
 |:------------------------|:----------------------------------------------------------------------------------------------------------|  
-|: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{t}^T$ and its standard error  See [@marss2018] for a complete description of the contents of the marssObject.                                                        |  
+|: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{t}^T$ and its standard error  See [@marss2020b] for a complete description of the contents of the marssObject.                                                        |  
 |: MARSS( ... )         |: The *MARSS* function is from the R package  **MARSS** and is used to specify the model form and estimate parameters                                         |     
-|:  Yt                 |: Yt is an daily time series of the natural logarithms of discrete flow measurements. On days without discrete measurements Yt is missing (NA). In this analysis, Yt is 98.3 percent missing values.                                                                                         |  
-|: A, U           |: The A and U vectors are components of the measurement and state equations, respectively, and need to be specified as 'zero' in the model statement, but are nuisance parameters in the context of this analysis. |  
+|:  Yt                 |: Yt is a daily time series of the natural logarithms of discrete flow measurements. On days without discrete measurements Yt is missing (NA). In this analysis, Yt is 98.3 percent missing values.                                                                                         |  
+|: A, U           |: The A and U vectors are components of the measurement and state equations, respectively, are nuisance parameters in the context of this analysis, but need to be specified as 'zero' in the model statement. |  
 |: R        |: R is the measurement error variance and can be a scalar or time series and can be specified or estimated.  |  
-|:                        |:    Cubic Regression Spline [@mgcv2019]                                                                         |  
+                                                              |  
 |: x0         |: x0 is the initial value of the state vector. In this analysis, it is based on the parameters of the GAM model for rating 18, which was used as the initial rating condition. |    
-|: data = [rating | discrete pairs  |: The dataframe used in the analysis, with partial listing below this table                                |  
-|: V0 |: V0 is the initial value for the state covariance matrix. In this analysis, it was estimated as 1000 times the covariance matrix of parameters in rating 18 estimated by a GAM model. Because the stage-flow data in rating 18 did not include measurement uncertainty, the GAM covariance matrix is unrealistically small. If the covariance is too small, information from discrete measurements will have little effect on the state vector; if the covariance is too large, the state vector might initially change too much in response to discrete flow measurements. It is possible to let the state covariance matrix be estimated entirely from the discrete flow measurements. |
+|: data = [rating | discrete pairs]  |: The dataframe used in the analysis, which may be a rating table, are discrete stage-flow measurement pairs.                                 |  
+|: V0 |: V0 is the initial value for the state covariance matrix. In this analysis, it was estimated as 1000 times the covariance matrix of parameters in rating 18 estimated by a GAM model. Because the stage-flow data in rating 18 did not include measurement uncertainty, the GAM covariance matrix is unrealistically small. If the covariance is too small, information from discrete measurements will have little effect on the state vector; if the covariance is too large, the state vector might initially change erratically in response to discrete flow measurements. It is possible to let the state covariance matrix be estimated entirely from the discrete flow measurements. Given that V0 is not so small that sensitivity to measurement updates is not effectively eliminated, and the time series of discrete data is sufficiently long, the magnitude of V0 may not be critical. Some experimentation with different magnitudes of the initial state covariance matrix may be helpful. |
 |: tinitx=0 |: The tinitx sets the initial state vector to apply at time zero, just before the first time step with data.  
 
 
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2020b].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$, is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0, $\vec{x}_{0}$, to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
 
-Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@marss2018].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$ is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0 $\vec{x}_{0}$ to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
-
+The function *MARSSparamCIs* was used to add standard errors, and confidence intervals, for the for the maximum likelihood parameters [@MARSS2020b].  Owing to extended computational requirements, the function *MARSSboot* was used to assess parameter bias only on the selected state-space model.   
 
 
 ## Results of Cubic Spline Regression and State-Space Modeling
@@ -1352,11 +1352,11 @@ V0 <- gam18_rating$Vp * 1000
 # V0 <- V0 - diag(V0) + c(1,1,1,1,.1) * diag(V0)
 
 ```
-The R package MARSS [@MARSS2018] was used in developing the state-space model. The notation below follows the authors' notation. 
+The R package MARSS [@MARSS2020b] was used in developing the state-space model. The notation below follows the authors' notation. 
 
 ### State-Space Model
 
-The state-space model [@MARSS2018]
+The state-space model [@MARSS2020a]
 
 $$
 \begin{align}
@@ -1366,7 +1366,7 @@ $$
 \end{align}
 $$
 
-Following notation by [@MARSS2018], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained 98.3 percent *not available* indicators. 
+Following notation by [@MARSS2020a], $y_t$ is the scalar measurement time series, which has a length equal to the number of days in the period of analysis. $y_t$ contains the natural logarithms of discrete flows on days of field measurements. Otherwise, the elements in the vector contain an *NA* value, indicating that a discrete flow measurement was *not available* on that day. In this analysis, $y_t$ contained 98.3 percent *not available* indicators. 
 
 $\vec{x}_t$ is the time series of state vectors, where each vector has a length of 5, corresponding to the number of knots and subsequent parameters specified in the generalized additive model (GAM) CRS equation. Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output.  These include *xtT*, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt* is the filter estimate of the state vector at time *t* given information up to time *t*; and *xtt1* is the predicted state at time *t* given information up to time *t-1*. 
 
@@ -1778,6 +1778,32 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
   mutate( cl025 = ytT + qnorm( 0.025 ) * ytT.se ,
           cl975 = ytT + qnorm( 0.975 ) * ytT.se ) 
 
+# Bootstrap sampling
+
+
+marssBoot <- MARSSboot( marss_fit, output = 'parameters', nboot = 5000, sim = 'parametric', param.gen = 'hessian')
+
+if ( file.exists( 'marssBoot.rds' )){
+  marssBoot <- read_rds( 'marssBoot.rds' )
+} else {
+  marssBoot <- MARSSboot( marss_fit, output = 'parameters', nboot = 5000, 
+                          sim = 'parametric', param.gen = 'hessian')
+  write_rds(marssBoot, path = 'marssBoot.rds')
+}
+
+marssBootdf <- data.frame( Qdiag = as.numeric( marssBoot$boot.params ) )
+
+marssBootdf %>% 
+  ggplot( aes( Qdiag )) +
+  geom_density() +
+  theme_bw() +
+  geom_vline( xintercept = marss_fit_Q_ones_multiplier_R_series_qualifierCI$parMean, color = 'blue') +
+  geom_vline( xintercept = c(marss_fit_Q_ones_multiplier_R_series_qualifierCI$par.upCI$Q,
+                             marss_fit_Q_ones_multiplier_R_series_qualifierCI$par.lowCI$Q),
+              linetype = 'dashed', color = 'blue' ) +
+  geom_vline(xintercept =  mean(marssBootdf$Qdiag), color = 'red')
+  
+
 ```
 
 
@@ -1992,7 +2018,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1} $, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T} $, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
@@ -2028,61 +2054,56 @@ CSRs also were developed by use of paired stage-flow discrete measurement data o
 The Cubic Spline Regessions (CSRs) developed within a generalized additive modelling (GAM) framework provided a flexible and accurate method for estimating the stage-flow relation at a streamgage either directly from an expanded stage-flow rating table, or from discrete pairs of stage-flow measurements. The GAM environment produced a set of parameter estimates for the CSRs and a method for generating basis vectors from stage data.  The CSR parameters were used as the state vector in the state equation of a state-space model. The set basis vectors formed a design matrix that premultiplied the state vector in the measurement equation to compute flow.  The process variance matrix $Q$ in the state equation and measurement variance $R$ in the measurement equation were estimated by use of discrete measurements of stage and flow.  
 
 
-Conclusions  
+## Appendices  
 
 
-## Appendix 1. Full printout of all estimated Generalized Additive Models (GAM) for Ratings 18-21
+### Appendix 1. Summary output of generalized additive models for Ratings 18-21 based on extended rating tables and discrete measurement pairs. 
 
-** Summary output for the GAM using extended rating 18 data **
+** Summary output for the GAM developed on the basis of extended rating 18 data **
 
 ```{r }
 summary(gam18_rating)
 ```
-** Summary output for the GAM using extended rating 19 data **
+** Summary output for the GAM developed on the basis of extended rating 19 data **
 
 ```{r}
 summary(gam19_rating)
 ```
 
-** Summary output for GAM using extended rating 20 data **
+** Summary output for the GAM developed on the basis of extended rating 20 data **
 ```{r, echo = FALSE}
 summary(gam20_rating)
 
 ```
 
-** Summary output for GAM using extended rating 21 data **
+** Summary output for the GAM developed on the basis of extended rating 21 data **
 ```{r echo = FALSE}
 
 summary(gam21_rating)
 ```
 
-** Summary GAM output using discrete measurement pairs during rating period 18 **
+** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 18 **
 ```{r echo = FALSE}
 summary(gam18_measPair)
 ```
 
-** Summary GAM output using discrete measurement pairs during rating period 19 **
+** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 19 **
 ```{r echo = FALSE}
 summary(gam19_measPair)
 ```
 
-** Summary GAM output using discrete measurement pairs during rating period 20 **
+** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 20 **
 ```{r echo = FALSE}
 summary(gam20_measPair)
 ```
 
-** Summary GAM output using discrete measurement pairs during rating period 21 **
+** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 21 **
 ```{r echo = FALSE}
 summary(gam21_measPair)
 ```
 
-** Summary GAM output using discrete measurement pairs during the period of analysis **
-```{r echo = FALSE}
-summary(gamPOA_measPair)
-```
 
-
-## Appendix 2. Full printout of all estimated state-space models.
+### Appendix 2. Summary output for estimated state-space models.
 
 ** Results for MARSS with Q 'equalvarcov' and R mean specified variance of discrete measurements  ** 
 
