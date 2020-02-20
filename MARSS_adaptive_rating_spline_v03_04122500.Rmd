@@ -442,7 +442,7 @@ df <- data.frame( Date = discrete_meas$Date[1:(nrow(discrete_meas)-2)],
 
 ### Time Between Discrete Flow Measurements  
 
-The frequency of discrete flow measurements is an important factor in detecting persistent and intermittent changes in the stage-flow rating, and in determining the costs of field operations.  During the period of analysis at Pere Marquette River, the mode of the distribution of time between discrete measurements was 42 (fig `r fig_no + 1`). There is some evidence from the plot that the time between discrete measurements increased after 1993. There are no extended gaps in discrete flow measurements.  The two measurements at zero time between measurements are from check measurements made to ensure the initially measured flow.   
+The frequency of discrete flow measurements is an important factor in detecting persistent and intermittent changes in the stage-flow rating, and in determining the costs of field operations.  During the period of analysis at Pere Marquette River, the mode of the distribution of time between discrete measurements was 43 (fig `r fig_no + 1`), and the mean was `r format( mean(df$days_between_measurements), digits = 3)`. There is some evidence from the plot that the time between discrete measurements increased after 1993. There are no extended gaps in discrete flow measurements.  The two measurements at zero time between measurements are from check measurements made to ensure the initially measured flow.   
 
 
 ```{r days_between_meas, messages = FALSE, warning = FALSE } 
@@ -459,12 +459,16 @@ p <- df %>%
   ggtitle(paste('Figure', fig_no, '. Distribution of days between consecutive flow measurements at \n streamgage 04122500 Pere River at Scottville, MI'),
           subtitle = 'Bin widths include 5 days.') +
   annotate('segment', x = as.Date('1985-01-01'), xend = as.Date('2020-01-01'),
-                      y = 43.5,                  yend = 43.5, 
+                      y = 42.0,                  yend = 42.0, 
            color = 'blue', linetype = 'dashed') +
-  annotate('text', x = as.Date('1986-01-01'), y = 50, label = 'Mode: 42', color = 'blue') 
+  annotate('segment', x = as.Date('1985-01-01'), xend = as.Date('2020-01-01'),
+                      y = 56.9,                  yend = 56.9, 
+           color = 'blue', linetype = 'dashed') +
+  annotate('text', x = as.Date('1986-01-01'), y = 50, label = 'Mode: 42', color = 'blue') +
+  annotate('text', x = as.Date('1986-07-01'), y = 62, label = 'Mean: 56.9', color = 'blue') 
 
   suppressMessages( ggExtra::ggMarginal(p, type = "histogram", margins = 'y') )
-  # geom_rug( size = 0.05, sides = 'r' )
+  
 
 ```
 
@@ -827,7 +831,7 @@ gamObject <- gam( flow        ~ s(stage,             bs = 'cr', k = knts),
 |: bs = 'cr'        |: bs is an input argument that accepts a code for the type of smoothing bases. The 'cr' indicates a CRS  |  
 |:                        |:    Cubic Regression Spline [@mgcv2019]                                                                         |  
 |: k = knts         |: k is an input argument for the number of knots, which is specified in this analysis as 5. The preferred number of knots may vary among streamgages. |    
-|: data = [rating | discrete pairs  |: The dataframe used in the analysis, with partial listing below this table                                |  
+|: data = [rating \| discrete pairs] |: The dataframe used in the analysis, which may be a rating table, are discrete stage-flow measurement pairs. 
 |: family = Gamma(link = log) |: A family is a parametric set of probability distributions of a certain form. In this case, the gamma distribution, which is a member of the exponential family, may be appropriate because the distribution of the natural logarithms of daily mean flows is consistent with the gamma distribution. |
 
 
@@ -938,6 +942,7 @@ marssObject <- MARSS( Yt, model = list(Z = Zt, A = 'zero', R = R, U = 'zero', Q 
 |: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{t}^T$ and its standard error  See [@MARSS2020b] for a complete description of the contents of the marssObject.                                                        |  
 |: MARSS( ... )         |: The *MARSS* function is from the R package  **MARSS** and is used to specify the model form and estimate parameters.                                         |     
 |:  Yt                 |: Yt is a daily time series of the natural logarithms of discrete flow measurements. On days without discrete measurements Yt is missing (NA). In this analysis, Yt is 98.3 percent missing values.                                                                                         |  
+|:  Zt                 |: Zt is the design matrix formed by the daily time series of basis functions. The basis functions are derived from the CRS based for the GAM rating 18 computed using the rating table. Daily values for the basis function were predicted using daily mean stage, except on days with discrete measurements. On these days, the discrete measured stage was substituted for the daily mean value.                                                                                         |  
 |: A, U           |: The A and U vectors are components of the measurement and state equations, respectively, are nuisance parameters in the context of this analysis, but need to be specified as 'zero' in the model statement. |  
 |: R        |: R is the measurement error variance and can be a scalar or time series and can be specified or estimated.  |  
                                                               |  
@@ -1592,7 +1597,7 @@ if ( file.exists( 'marss_fit_Q_diag_unequal_R_series_specified_var.rds' )){
 }
 ```
 
-## Modeling Results  
+## State-Space Modeling Results  
 
 Modeling results include the selection of the form of the state-space model form, the depiction of changes in the state (CRS parameters) over time, the effect of parameter changes on the shape and fit of the stage-flow relation indicated by the CRS, and the estimation of magnitude and uncertainty of streamflow records.  
 
@@ -1792,13 +1797,14 @@ marssBoot_wide %>%
 
 ## Changes in Cubic Regression Spline Parameters with Discrete Measurements    
 
+Figure `r fig_no + 1` shows the changes in basis parameters at times of discrete measurement. All parameter series followed a random walk, given that an identity matrix premultiplied $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis.  At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 8.    
 
-```{r, state_parameter_matrix, fig.height = 9, fig.width = 9 }
+```{r, state_parameter_matrix, fig.height = 10, fig.width = 9 }
 
 # marss_state_tT is the estimate of the state at time t given all time T
 marss_state_tT           <- data.frame( t(as.matrix( marss_kf$xtT, ncol = 5, nrow = 10966)))
 marss_state_tT$Date      <- flow_daily_pub$Date
-colnames(marss_state_tT) <- c('x1 (b0)', 'x2 (b1)', 'x3 (b2)', 'x4 (b3)', 'x5 (b4)', 'Date')
+colnames(marss_state_tT) <- c('0', '1', '2', '3', '4', 'Date')
 
 # Identify days of Discrete Flow Measurement (# # # DFM # # #)
 ndx_DFM <- which( !is.na( df_stage_flow_allDays$flow_discrete_mea ) )
@@ -1807,14 +1813,15 @@ fig_no <- fig_no + 1
 marss_state_tT %>% 
   gather( key = 'Parameter', value = 'Estimate', -Date) %>% 
   ggplot( aes( x = Date, y = Estimate, group = Parameter )) +
-  geom_line() +
   geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_DFM ], color = 'lightblue' ) +
+  geom_step() +
   theme_bw() +
   xlab( 'Date') + 
   ylab( 'State Estimates') +
   theme( legend.position = 'bottom') +
-  facet_wrap( ncol = 1, Parameter ~ ., scales = 'free' ) +
-  ggtitle( label = paste0('Figure ', fig_no, '. Daily estimates of the state vector as parameters of the corresponding basis functions.') ,
+  facet_wrap( ncol = 1, Parameter ~ ., scales = 'free',
+              labeller = label_bquote(beta [.(Parameter) ] ) ) +
+  ggtitle( label = paste0('Figure ', fig_no, '. Step plot of discrete changes in the state vector of basis parameters on days of discrete measurements.') ,
            subtitle = 'Vertical lines indicate dates of discrete flow measurements.')
 
 
@@ -1823,11 +1830,13 @@ marss_state_tT %>%
 
 ## Stage-Flow Rating Adaptions with Discrete Measurements  
 
+Figure `r fig_no + 1` shows intra- and inter-annual adaptations of the stage-flow relation to discrete measurements at three-year intervals starting in 1990 and ending in 2017.  Adaptations of the rating (in blue) are referenced to rating 18 (in red) and rating 21 (in green). Curves for the ratings 18 and 21 are based on rating table data.  In general, intra-annual adaptations of the rating relation are minor and difficult to visually discern, although in some years, like 1992, the lines forming the rating curves, one for each discrete measurement, appear somewhat thicker than other years, like 1998. Inter-annual adaptations are more apparent. In particular, the 1992 rating corresponds closely with rating 18, which served as the initial conditions for the state-space model. Over time, the adapted ratings based on the state-space model gradually transition between rating 18 and rating 21. The adaptations of the lower stage-flow relations, where discrete measurements are more common than measured flow greater than 4,000 ft^3^/s, are bounded within rating 18 and 21, and are consistent with the pattern of transition in the discrete stage-flow measurements. The adaptations of the higher stage-flow relations begin plot to the right of rating 21 in about 2008, but are considered  plausible given the 4,830 ft^3^/s flow measurement at 6.63 ft of stage in 2014. 
+
 
 ```{r adaptive_rating, fig.height = 16, fig.width = 9}
 # Design matrix for allDays
 
-sel_yr <- seq(from = 1992, to = 2019, by = 3)
+sel_yr <- seq(from = 1990, to = 2017, by = 3)
 
 # Design matrix formed with from Rating 18 basis functions using the stage range in Rating 21
 #   The range in stage is the widest range of stage (0.53 - 8.10 ft)
@@ -1869,7 +1878,7 @@ tmp <- df_discrete_meas %>%
   addWaterYear() %>% 
   filter( waterYear %in% sel_yr)
 
-
+fig_no <- fig_no + 1
 adaptive_rating_measDays %>% 
   dplyr::filter( waterYear %in% sel_yr) %>%
   arrange( marss_flow ) %>% 
@@ -1887,7 +1896,8 @@ adaptive_rating_measDays %>%
   geom_line( data = rating18, aes( x = rated18_flow, y = stage, group = NULL), color = 'red', size = 0.5 ) +
   geom_line( data = rating21, aes( x = rated21_flow, y = stage, group = NULL), color = 'forestgreen', size = 0.5 ) +
   geom_point( data = tmp, aes( x = flow_discrete_mea, y = stage_discrete_mea, color = factor(waterYear))) +
-  theme( legend.position = 'bottom')
+  theme( legend.position = 'bottom') +
+  ggtitle( label = paste0('Figure ', fig_no, '. Annual rating adaptations to discrete measurements of stage and flow'))
 
 ```
 
@@ -1974,7 +1984,7 @@ lmtT  <- summary(with(df_DFM, lm(ytT  ~ ytm)))
 ** Kalman Estimators **  
 Three Kalman estimates are include in this analysis: forecast $\hat{y}_{t}^{t-1}$ , filtered $\hat{y}_{t}^{t}$, and smoothed. $\hat{y}_{t}^{T}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
  
-Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average 56.6 days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
+Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average `r format( mean(df$days_between_measurements), digits = 3)` days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
 
 
 ```{r  kalman_estimators_plt, fig.height = 6, fig.width = 7}
@@ -2001,7 +2011,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E\Delta{t}$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
@@ -2173,9 +2183,10 @@ print( marss_fit_Q_covar_multiplier_R_one_multiplierCI )
 if ( file.exists( 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds' )){
   marss_fit_Q_unequal_scalars_R_one_multiplierCI <- read_rds( 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds' )
 } else {
- marss_fit_Q_unequal_scalars_R_one_multiplierCI  <- MARSSparamCIs( marss_fit_Q_unequal_scalars_R_one_multiplier)
+ marss_fit_Q_unequal_scalars_R_one_multiplierCIboot2  <- MARSSparamCIs( marss_fit_Q_unequal_scalars_R_one_multiplier,
+                                                                   method = 'parametric', nboot = 1000)
   
-  write_rds(marss_fit_Q_unequal_scalars_R_one_multiplierCI, path = 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds')
+  write_rds(marss_fit_Q_unequal_scalars_R_one_multiplierCIboot2, path = 'marss_fit_Q_unequal_scalars_R_one_multiplierCIboot2.rds')
 }
 print( marss_fit_Q_unequal_scalars_R_one_multiplierCI )
 
