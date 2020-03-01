@@ -870,7 +870,7 @@ The scalar measurement time series $y_t$ has a length equal to the number of day
 
 The random process noise vector $\vec{w}_t$ is assumed to have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and fixed covariance $Q$.  The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
 
-The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
+The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are fundamentally biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
 
 The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
 
@@ -1744,53 +1744,53 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 # This is the more interesting form for the marss_fit model
 # marssBoot <- MARSSboot(marss_fit, nboot = 1000, sim = 'parametric', param.gen = 'MLE')
 
-marss_fit_Q_covar_multiplier_R_one_multiplierCI <- read_rds( 'marss_fit_Q_covar_multiplier_R_one_multiplierCI.rds')
+# marss_fit_Q_covar_multiplier_R_one_multiplierCI <- read_rds( 'marss_fit_Q_covar_multiplier_R_one_multiplierCI.rds')
+# 
+# if ( file.exists( 'marssBoot.rds' )){
+#   marssBoot <- read_rds( 'marssBoot.rds' )
+# } else {
+#   marssBoot <- MARSSboot( marss_fit, output = 'parameters', nboot = 5000, 
+#                           sim = 'parametric', param.gen = 'hessian')
+#   write_rds(marssBoot, path = 'marssBoot.rds')
+# }
+# 
 
-if ( file.exists( 'marssBoot.rds' )){
-  marssBoot <- read_rds( 'marssBoot.rds' )
-} else {
-  marssBoot <- MARSSboot( marss_fit, output = 'parameters', nboot = 5000, 
-                          sim = 'parametric', param.gen = 'hessian')
-  write_rds(marssBoot, path = 'marssBoot.rds')
-}
-
-
-fig_no <- fig_no + 1
-
-marssBoot_wide <- data.frame( R.R = as.numeric( marssBoot$boot.params[1,]),
-                           Q.q = as.numeric( marssBoot$boot.params[2,]))
-
-marssBoot_wide %>% 
-  ggplot( aes( R.R )) +
-  geom_histogram( fill = 'grey70') +
-  geom_vline( xintercept =   marss_fit_Q_covar_multiplier_R_one_multiplierCI$parMean[1], color = 'blue') +
-  geom_vline( xintercept = c(marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.upCI$R,
-                             marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.lowCI$R),
-              linetype = 'dashed', color = 'blue' ) +
-  geom_vline(xintercept =  mean(marssBoot_wide$R.R), color = 'red') +
-  geom_vline(xintercept =  quantile(marssBoot_wide$R.R, probs = c(0.025, 0.975)), 
-                                    color = 'red', linetype = 'dotdash') +
-  xlab('Estimated Q for diagonal and equal model') +
-  ylab('Probability density') +
-  theme_bw() +
-  ggtitle(paste0('Figure ', fig_no, '. Estimates of the distribution of parameter Q by CI and bootstraping' ))
-
-
-marssBoot_wide %>% 
-  ggplot( aes( Q.q )) +
-  geom_histogram() +
-  geom_vline( xintercept =   marss_fit_Q_covar_multiplier_R_one_multiplierCI$parMean[2], color = 'blue') +
-  geom_vline( xintercept = c(marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.upCI$Q,
-                             marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.lowCI$Q),
-              linetype = 'dashed', color = 'blue' ) +
-  geom_vline(xintercept =  mean(marssBoot_wide$Q.q), color = 'red') +
-  geom_vline(xintercept =  quantile(marssBoot_wide$Q.q, probs = c(0.025, 0.975)), 
-                                    color = 'red', linetype = 'dotdash') +
-  xlab('Estimated Q for diagonal and equal model') +
-  ylab('Probability density') +
-  theme_bw() +
-  ggtitle(paste0('Figure ', fig_no, '. Estimates of the distribution of parameter Q by CI and bootstraping' ))
-  
+# fig_no <- fig_no + 1
+# 
+# marssBoot_wide <- data.frame( R.R = as.numeric( marssBoot$boot.params[1,]),
+#                            Q.q = as.numeric( marssBoot$boot.params[2,]))
+# 
+# marssBoot_wide %>% 
+#   ggplot( aes( R.R )) +
+#   geom_histogram( fill = 'grey70') +
+#   geom_vline( xintercept =   marss_fit_Q_covar_multiplier_R_one_multiplierCI$parMean[1], color = 'blue') +
+#   geom_vline( xintercept = c(marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.upCI$R,
+#                              marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.lowCI$R),
+#               linetype = 'dashed', color = 'blue' ) +
+#   geom_vline(xintercept =  mean(marssBoot_wide$R.R), color = 'red') +
+#   geom_vline(xintercept =  quantile(marssBoot_wide$R.R, probs = c(0.025, 0.975)), 
+#                                     color = 'red', linetype = 'dotdash') +
+#   xlab('Estimated Q for diagonal and equal model') +
+#   ylab('Probability density') +
+#   theme_bw() +
+#   ggtitle(paste0('Figure ', fig_no, '. Estimates of the distribution of parameter Q by CI and bootstraping' ))
+# 
+# 
+# marssBoot_wide %>% 
+#   ggplot( aes( Q.q )) +
+#   geom_histogram() +
+#   geom_vline( xintercept =   marss_fit_Q_covar_multiplier_R_one_multiplierCI$parMean[2], color = 'blue') +
+#   geom_vline( xintercept = c(marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.upCI$Q,
+#                              marss_fit_Q_covar_multiplier_R_one_multiplierCI$par.lowCI$Q),
+#               linetype = 'dashed', color = 'blue' ) +
+#   geom_vline(xintercept =  mean(marssBoot_wide$Q.q), color = 'red') +
+#   geom_vline(xintercept =  quantile(marssBoot_wide$Q.q, probs = c(0.025, 0.975)), 
+#                                     color = 'red', linetype = 'dotdash') +
+#   xlab('Estimated Q for diagonal and equal model') +
+#   ylab('Probability density') +
+#   theme_bw() +
+#   ggtitle(paste0('Figure ', fig_no, '. Estimates of the distribution of parameter Q by CI and bootstraping' ))
+#   
   
 ```
 
@@ -1906,16 +1906,21 @@ adaptive_rating_measDays %>%
 
 
 
+
+
+
 ```{r plot_daily_flow_se, fig.width = 12, fig.height = 20 }
 sel_yr <- seq(from = 1990, to = 2019, by = 3)
 
+
+fig_no <- fig_no + 1
 df_stage_flow_allDays %>% 
   dplyr::filter( waterYear %in% sel_yr ) %>% 
   mutate( y_ice = pmin(flow_daily_pub, exp(ytT)) ) %>%  
   ggplot( aes( x = Date  )) +
   geom_line( aes( y = exp(ytT) ), color = 'red' ) +
-  geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 ) +
-  geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  ) +
+  suppressWarnings(geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 )) +
+  suppressWarnings(geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  )) +
   geom_line( aes( y = exp(cl025) ), color = 'blue', size = 0.5) +
   geom_line( aes( y = exp(cl975) ), color = 'blue', size = 0.5) +
   geom_line(  aes( y = flow_daily_pub ), color = 'darkgreen', size = 0.7) +
@@ -1926,8 +1931,8 @@ df_stage_flow_allDays %>%
   ylab( 'Daily mean streamflow, in cubic feet per second') +
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
-  ggtitle( 'Figure x. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
-           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.')
+  ggtitle( paste0('Figure ', fig_no, '. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
+           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.') )
 
 
 ```
@@ -2238,6 +2243,108 @@ if ( file.exists( 'marss_fit_Q_ones_multiplier_R_series_qualifierCI.rds' )){
 print( marss_fit_Q_ones_multiplier_R_series_qualifierCI )
 
 ```
+
+## Appendix 3. Maximum likelihood and bootstrap estimates of the magnitude and uncertainty of diagaonal elements of the process covariance matrix Q and measurement variance R.
+
+The purpose of this analysis was to investigate possible bias in the maximum likelihood (ML) estimates of the diagonal and unequal elements of the process covariance matix Q. The positive bias aries because variance is contrained to be positive. This bias is more severe when elements are very small, as indicated by confidence intervals that span zero.  According to the [@MARSS2020b], this happens when there is not sufficient data to estimate both process covarainces and measurement variances specified. The *MARSSboot* function was used to provide unbiased bootstrap parameter estimates of magnitude and uncertainty for comparison with maximum likelihood estimates.  
+
+Maximum likelihood and bootstrap estimates of state-space model were computed for a process covariance matrix Q having diagonal and unequal elements, and a measurement variance of R was selected for comparison. This test model included six estimated parameters and produced an AIC of -423.9, which was greater (hence, less likely to be the correct model) than the selected model. The selected model had Q diagonal and equal elements and specified variances in the measurement variance R. This reduced parameter model including only one parameter and produced an AIC of -464.9, which indicate that the selected model was more likely to have the correct form than the test model.
+
+The estimated Q and R parameter magnitudes (plotted vertically) and uncertainties (plotted horizontally) are shown on fig. `r fig_no + 1`. In addition to the ML estimates, there were two bootstrap samples, each of size 1000. The general consistency between intervals positions and expected values for the two samples support the reproduciblity of the results.  
+
+* For the first diagonal element of Q, Q11, the 95% confidence interval (CI) about the ML estimate spans zero.  The corresponding ML parameter estimate is thus considered small. In comparison, the bootstrap confidence intervals are bounded by zero from below, but are about 50% greater than the upper confidence limit for the ML estimate. The unbiased estimates from the bootstrap samples, however, are generally consistent with the ML expected value for Q11.  
+
+* For diagonal elements Q22, Q33, and Q44, the ML and bootstrap estimates of parameter magnitudes and uncertainties are similar. The ML estimate of the expected values are greater than zero, while the ML CI spans zero. In contrast, all bootstrap limits are greater than zero, and, inexplicably, the unbiased estimates of the variance parameters are (infeasibily) less than zero.  
+
+* For the measurement variance R11, the ML and bootstrap estimates of expected values and variances are consistent.  
+
+Given that the ML CI estimate of diagonal and equal Q elements for the selected model does not span zero, the ML estimate of the expected to be sufficiently large that there is little concern that the ML value is biased.   
+
+
+```{r boot, fig.height = 8, fig.width = 8}
+
+# boot1 and boot2 were created from command:
+# This is the more interesting form for the marss_fit model
+# marssBoot <- MARSSboot(marss_fit, nboot = 1000, sim = 'parametric', param.gen = 'MLE')
+
+boot1 <- read_rds(path = "C:/Home/projects/spline_rating_curves/stage_discharge_rating/boot1.rds")
+
+boot1.lowCI_Q <- boot1$par.lowCI$Q
+boot1.upCI_Q  <- boot1$par.upCI$Q
+boot1.Q       <- boot1$par$Q
+boot1.lowCI_R <- boot1$par.lowCI$R
+boot1.upCI_R  <- boot1$par.upCI$R
+boot1.R       <- boot1$par$R
+boot1.coef_Q  <- boot1$coef[2:6]
+boot1.coef_R  <- boot1$coef[1]
+ml.lowCI_Q <- marss_fit_Q_unequal_scalars_R_one_multiplierCI$par.lowCI$Q
+ml.upCI_Q  <- marss_fit_Q_unequal_scalars_R_one_multiplierCI$par.upCI$Q
+ml.lowCI_R <- marss_fit_Q_unequal_scalars_R_one_multiplierCI$par.lowCI$R
+ml.upCI_R  <- marss_fit_Q_unequal_scalars_R_one_multiplierCI$par.upCI$R
+
+
+boot2 <- read_rds(path = "C:/Home/projects/spline_rating_curves/stage_discharge_rating/boot2.rds")
+
+boot2.lowCI_Q <- boot2$par.lowCI$Q
+boot2.upCI_Q  <- boot2$par.upCI$Q
+boot2.Q       <- boot2$par$Q
+boot2.lowCI_R <- boot2$par.lowCI$R
+boot2.upCI_R  <- boot2$par.upCI$R
+boot2.R       <- boot2$par$R
+boot2.coef_Q  <- boot2$coef[2:6]
+boot2.coef_R  <- boot2$coef[1]
+
+
+df <- data.frame(
+  param  = as.factor( c('Q11', 'Q22', 'Q33', 'Q44', 'Q55', 'R11') ),
+  ML_Expect = as.numeric( c(boot1.Q,       boot1.R)),
+  ML_025    = as.numeric( c(ml.lowCI_Q,    ml.lowCI_R)),
+  ML_975    = as.numeric( c(ml.upCI_Q ,    ml.upCI_R)) ,
+  B1_025    = as.numeric( c(boot1.lowCI_Q, boot1.lowCI_R)),
+  B1_975    = as.numeric( c(boot1.upCI_Q , boot1.upCI_R)),
+  B2_025    = as.numeric( c(boot2.lowCI_Q, boot2.lowCI_R)),
+  B2_975    = as.numeric( c(boot2.upCI_Q , boot2.upCI_R)) ,
+  B1_unBias   = as.numeric( c(boot1$par.bias$Q + boot1$par$Q,
+                              boot1$par.bias$R + boot1$par$R)),
+  B2_unBias   = as.numeric( c(boot2$par.bias$Q + boot2$par$Q,
+                              boot2$par.bias$R + boot2$par$R)))
+
+cols <- c('Maximum Likelihood Expected value'           = 'blue',
+          'Bootstrap 1 Unbiased Estimate'               = 'forestgreen',
+          'Bootstrap 2 Unbiased Estimate'               = 'darkgreen',
+          'Maximum Likelihood  95% Confidence Interval' = 'blue',
+          'Bootstrap 1 95% Confidence Interval'         = 'forestgreen',
+          'Bootstrap 2 95% Confidence Interval'         = 'darkgreen',
+          'Zero Reference'                              = 'black')
+
+fig_no <- fig_no + 1
+
+df %>%
+  ggplot() +
+  geom_vline(   aes( xintercept = ML_Expect, color = 'Maximum Likelihood Expected value'), 
+                linetype = 'dashed', size = 1.0, alpha = 0.5) +
+  geom_vline(   aes( xintercept = 0 , color = 'Zero Reference'), linetype = 'dotted') +
+  geom_vline(   aes( xintercept = B1_unBias, color = 'Bootstrap 1 95% Confidence Interval'), linetype = 'dashed') +
+  geom_vline(   aes( xintercept = B2_unBias, color = 'Bootstrap 2 95% Confidence Interval'), linetype = 'dashed') +
+  geom_segment( aes( x = ML_025, xend = ML_975, y    = 0.10, yend = 0.10 , 
+                color = 'Maximum Likelihood  95% Confidence Interval')) + 
+  geom_segment( aes( x = B1_025, xend = B1_975, y    = 0.20, yend = 0.20, 
+                color = 'Bootstrap 1 95% Confidence Interval' )) +
+  geom_segment( aes( x = B2_025, xend = B2_975, y    = 0.25, yend = 0.25,
+                color = 'Bootstrap 2 95% Confidence Interval' )) +
+  theme_bw() + 
+  labs( x = 'Parameter Values', y = '', color = 'Legend' ) +
+  facet_wrap( param ~ ., scales = "free_x", nrow = 6) +
+  scale_y_continuous( limits = c(0, 0.3), breaks = NULL) +
+  scale_color_manual( values = cols ) +
+  theme( legend.position = 'bottom') +
+  guides( color = guide_legend( title = 'Statistics', ncol = 2 )) +
+  ggtitle( label = paste0('Figure ', fig_no, '. Diagonal elements of the process covariance matrix and the measurement variance matrix'))
+
+  
+```
+
+
 
 # References Cited
 
