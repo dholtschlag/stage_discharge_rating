@@ -1,5 +1,5 @@
 ---
-title: "Adapting rating curves for persistent changes in stage-flow relations and characterizing uncertainties of streamflow records with discrete measurements"
+title: "Adapting Rating Curves for Persistent Changes in Stage-Flow Relations and Characterizing Uncertainties of Streamflow Records with Discrete Measurements"
 author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
@@ -11,13 +11,28 @@ output:
 bibliography: bibliography.bib
 ---
 
+\documentclass[letterpaper]{article}
+\usepackage{graphicx}               % Necessary to use \scalebox
+\usepackage{amsmath,amssymb}
+\begin{document}
+\noindent 
+normal: $ x^2 + 2xy + y^2 $\\
+displaystyle: $ {\displaystyle x^2 + 2xy + y^2} $\\
+scriptstyle: $ {\scriptstyle x^2 + 2xy + y^2} $\\
+scriptscriptstyle: $ {\scriptscriptstyle x^2 + 2xy + y^2} $\\
+textstyle: $ {\textstyle x^2 + 2xy + y^2} $
+
+\noindent
+\scalebox{0.5}{%
+normal: $ x^2 + 2xy + y^2$}
+\end{document}
 # Abstract
 
-An adaptive stage-flow estimation approach is developed to track persistent changes in the relation between stage (water-surface elevation) and flow (streamflow discharge) at a streamgage. The approach is initialized by estimating a cubic regression spline (CRS) for the stage-flow relation within a generalized additive modelling (GAM) framework. The initial CRS parameters can be estimated from data in an existing stage-flow rating table, or from discrete measurements of stage and flow throughout the stage domain of interest. These parameters are applied to a set of basis vectors, derived from the stage values, and used to compute flow for stage-flow relations at an initial time. Changes is the CRS parameters, reflecting changes in the stage-flow relation, are tracked within a state-space model by use of discrete flow measurements. In addition, the state-space model can be used with Kalman filtering and stage values to compute the magnitude and uncertainty of the streamflow time series. The approach is demonstrated with data from the U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich.  Extension of this approach to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate analysis involving a streamflow network that is beyond the scope of this report.  
+An adaptive stage-flow estimation approach is developed to track persistent changes in the relation between stage (water-surface elevation) and flow (streamflow discharge) at a streamgage. The approach is initialized by estimating a cubic regression spline for the stage-flow relation within a generalized additive modelling  framework. The initial cubic regression spline parameters can be estimated from data in an existing stage-flow rating table, or from discrete measurements of stage and flow throughout the stage domain of interest. These parameters are applied to a set of basis vectors, derived from the stage values, and used to compute flow for stage-flow relations at an initial time. Changes is the cubic regression spline parameters, reflecting changes in the stage-flow relation, are tracked within a state-space model by use of discrete flow measurements. In addition, the state-space model can be used with Kalman filtering and stage values to compute the magnitude and uncertainty of the streamflow time series. The approach is demonstrated with data from the U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Mich.  Extension of this approach to track intermittent changes, associated with variable ice-backwater for example, would require a multivariate analysis involving a streamflow network that is beyond the scope of this report.  
 
 # Background
 
-The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 active streamgages throughout the United States. Streamgages measure outflow from a basin, which is generally topographically defined by a watershed.  Computations are commonly based on continual measurements of stage at 10- to 60-minute intervals. The stage data is used to compute corresponding values of flow based on a empirical relation between stage and flow commonly referred to as a rating curve or table. The rating describes a monotonically increasing relation between stage and flow. A rating is developed and maintained on the basis of discrete, contemporaneous measurements of stage and flow that span the typical range of stage conditions at the streamgage. Discrete measurements require a field visit to the streamgage, which can be a major element in the cost of streamgage operation.  
+The U.S. Geological Survey (USGS) computes records of streamflow at about 8,500 active streamgages throughout the United States. Streamgages measure outflow from a basin, which is generally topographically defined by a watershed.  Computations are commonly based on continual measurements of stage at 10- to 60-minute intervals. The stage data is used to compute corresponding values of flow based on a empirical relation between stage and flow commonly referred to as a rating curve or table. The rating describes a monotonically increasing relation between stage and flow. A rating is developed and maintained on the basis of discrete, contemporaneous measurements of stage and flow that span the range of stage conditions at the streamgage. Discrete measurements require a field visit to the streamgage, which can be a major element in the cost of streamgage operation.  
 
 The stage-flow relation can change gradually over time due to persistent changes in the channel or overbank geometry and hydraulic characteristics. Alternatively, this relation can change abruptly owing to intermittent effects, such as increased backwater associated with aquatic plant growth or ice formation. Once the cause of the intermittent changes are no longer present, the stage-flow relation may revert to nominal conditions, consistent with possible persistent changes at the stream site.  Commonly both persistent and intermittent changes occur in the stage-flow rating.  The distinction between persistent and intermittent changes is somewhat arbitrary, but practically determined by the frequency of discrete measurements. Abrupt intermittent changes, such as ice backwater effects, can occur on a time scale of hours to days during periods when no discrete flow measurements occur to identify the onset, cessation, or magnitude of backwater associated with these events.  
 
@@ -182,8 +197,8 @@ mi_inset <-mi_map %>%
   geom_polygon( fill = 'black') +
   geom_point( data = data.frame( long = site_info$dec_long_va, lat = site_info$dec_lat_va),
               aes( x = long, y = lat, group = NA), color = 'red', size = 2) + 
-  xlab('') +
-  ylab('')
+  xlab('Longitude') +
+  ylab('Latitude')
 
 
 vicinity + inset(grob = ggplotGrob(mi_inset), xmin = -86.85, xmax = -86.4, 
@@ -605,7 +620,7 @@ rating_long$rating_no <- c(rep(18, nrow(rating18)), rep(19, nrow(rating19)),
 
 ### Estimation of missing stage values
 
-A stage-flow relation is adapted by changing CRS parameters on the basis of discrete measurements of stage and flow.  Intervening measurements of stage, however, can be used to generate a set of basis functions (one for each knot) from an underlying CRS and used to compute the magnitudes and uncertainties of daily or unit streamflow. 
+A stage-flow relation is adapted by changing cubic regression spline (CRS) parameters on the basis of discrete measurements of stage and flow.  Intervening measurements of stage, however, can be used to generate a set of basis functions (one for each knot) from an underlying CRS and used to compute the magnitudes and uncertainties of daily or unit streamflow. 
 
 The time series of computed daily mean stage values (fig. `r fig_no + 1`) shows a seasonal variation within which annual minimums appear to have a downward trend. In particular, during the early 1990s, minimum annual stage values were generally greater than 1.6 ft above gage datum, while during the 2010s, minimum annual stage values were generally 0.6 ft lower. This pattern is consistent with the possible trend in the discrete measurements of stage data discussed earlier. Based on visual inspection of the time series, the variability of stage values may be increasing with time.
 
@@ -665,7 +680,7 @@ df_stage_flow_allDays[, ] %>%
   annotate('text', x = as.Date('2016-01-01'), y = 7, label = 'Rating 21', hjust = 'left') +
   ylab('Stage, in feet above gage datum of 597.66 ft NAVD29') +
   ggtitle( paste0('Figure ', fig_no, '. Time Series of daily mean stage computed from unit values at \n04122500 Pere Marquette River at Scottville, Mich., during the period of analysis'),
-           subtitle = paste0('Vertical blue lines indicate divisons between selected rating periods.'))
+           subtitle = paste0('Vertical blue lines indicate divisions between selected rating periods.'))
   
 ```
 
@@ -794,25 +809,27 @@ rating_long %>%
   
 ```
 
-# Methods for Adapting Stage-Flow Rating and Estimating the Magnitude and Uncertainty of Streamflow Records
+# Methods for Adapting Stage-Flow Ratings and Estimating the Magnitudes and Uncertainties of Streamflow Records
 
-Using a generalized additive modelling (GAM) framework[@Wood2006], a cubic regression spline (CRS) is used to approximate either an existing rating from an extended rating table or develop a rating from a set of discrete stage-flow measurements representing typical flow conditions at a streamgage.  Parameters of the CRS form the state vector of the state equation, which together with the measurement equation form the state-space model. In this analysis, parameter estimates in the state-space model are computed at daily time steps. In applications, unit time steps could be used. 
+A CRS can be used to approximate either an existing rating from an extended rating table, or to develop a new rating from a set of discrete stage-flow measurements representing unobstructed (typical) flow conditions at a streamgage. A generalized additive modelling (GAM) framework[@Wood2006] provides a basis for assessing the statistical significance of individual CRS parameters and provides measures of the accuracy of the CRS model.  Parameters of the CRS, $\vec{\beta}$, form the state vector of the state equation, which together with the measurement equation form the state-space model. In this analysis, estimates of the process covariance $Q$ and measurement variance $R$ parameters in the state-space model are based at daily time steps. In applications, unit time steps could be used with adjustments to the $Q$ parameters in the state equation that are proportional to changes in the length of the time intervals. 
 
-The uncertainty of the state vector increases with time between measurements based on an estimated process covariance matrix $Q$ in the state equation. Within the measurement equation, the state vector is premultiplied by a set of basis functions with compatible length (computed as a function of stage), to estimate measured flow. On days when a discrete measurement occurs, the parameters in the state vector are updated to adapt the rating curve to reduce the differences between the estimated and measured flows, and to reduce the uncertainty described by the state covariance matrix $V$.  
+The uncertainty of the state vector, as indicated by the state covariance matrix $V$, increases with time between measurements based on an estimated process covariance matrix $Q$ in the state equation. Within the measurement equation, the state vector is premultiplied by a set of basis functions with compatible length to compute unit or daily flows. On days when a discrete measurement occurs, the CRS parameters are updated to adapt the rating curve to possible changes in the stage-flow relation. The updates reduce the differences between the estimated and measured flows, and reduce the uncertainty of the state covariance matrix $V$.  
 
-The remaining discrepancies between discrete measurements of flow and estimated flow, both in natural logarithmic units, are described by the measurement variance $R$ in the measurement equation. The value of $R$ can be specified or estimated iteratively. Once, $Q$ and $R$ are obtained, a set of CRS parameters can be computed that sequentially adapt the rating curve based on each discrete flow measurement used in the analysis. In addition, a Kalman filter [@Simon2006] can be applied to estimate the magnitude and uncertainty of daily or unit flows based on daily or unit stages. Details of this process are described in the following paragraphs. 
+The remaining discrepancies between discrete measurements of flow and estimated flow, both in natural logarithmic units, are described by the measurement variance $R$ in the measurement equation. The value of $R$ can be specified or estimated. Once, $Q$ and $R$ are obtained, a set of CRS parameters can be computed that sequentially adapt the rating curve based on each discrete flow measurement used in the analysis. In addition, a Kalman filter [@Simon2006] can be applied to estimate the magnitude and uncertainty of daily or unit flows based on daily or unit stages. Details of this process are described in the following paragraphs. 
 
 ## Cubic Regression Splines
 
-cubic regression splines (CRSs) are piecewise polynomials with constraints to ensure continuity to the second derivative at interior knots and zero second derivatives at the boundary knots [@Wood2006].  Individual polynomials are third order. Special constraints on the boundary knots ensures linear extrapolation beyond the domain of the stage data. CRS parameters were estimated within a generalized additive model (GAM) to flexibly represent the monotonically increasing relation between stage and flow. The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, statistics on model fit, and utility functions like matrix.model() and predict() for developing the CRSs within the R [@cite_R] programming environment. 
+CRS are piecewise polynomials with constraints to ensure continuity to the second derivative at interior knots and zero second derivatives at the boundary knots [@Wood2006].  Individual polynomials are cubic (third order). Special constraints on the boundary knots ensures linear extrapolation beyond the domain of the stage data. CRS parameters were estimated within a GAM to flexibly represent the monotonically increasing relation between stage and flow. The GAM package 'mgcv' [@mgcv2019] provided parameter estimation, statistics on model fit, and utility functions like *gam()*, *matrix.model()* and *predict()* for developing the CRSs within the R [@cite_R] programming environment. 
 
-A linear form of the CRS was used by specifying a set of basis functions such that $b_j(x)$ is the $j^{th}$ function of the set.  A simple third-order (cubic) polynomial basis can be represented with basis functions $b_0(x) = 1$, $b_1(x) = x$, $b_2(x) = x^2$, and $b_3 = x^3$, so that $y_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + x_i^3 \beta_3 + e_i.$ Thus, a third order polynomial has four basis functions ${1, \ x, \ x^2, \ x^3}$ and four corresponding parameters ${\beta_0, \ \beta_1, \ \beta_2, \ \beta_3}$.  According to [@Wood2017], a polynomial basis is a useful approximation for a specific point, however, splines are preferred when interest in the response of flow is over the entire domain of stage. 
+A simple cubic polynomial equation can be specified by a set of parameters $\beta_j$ and polynomial terms (in place of basis functions) $x^j$ for $j = 0, 1, 2, 3$, such that $\hat{y}_i = \beta_0 + x_i \beta_1 + x_i^2 \beta_2 + x_i^3 \beta_3.$ Although a cubic polynomial is often a useful approximation for point estimation, cubic splines are preferred when estimating the response over a range of values [@Wood2017]. 
 
-CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage. Five knots resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. More generally, the *gam* function defaults to placing the interior knots at even quantiles of the data, but can be replaced with manual specification more consistent with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the response variable (flow).  
+CRSs used in this analysis were specified as having 5 knots, which was thought to be sufficiently flexible for the stage-flow relations at the selected streamgage. Five knots resulted in two boundary knots at the minimum and maximum of the stage data, and three interior knots at the 25^th^-, 50^th^-, and 75^th^-percentiles. Generally, the *gam()* function defaults to placing the interior knots at evenly-spaced quantiles of the data, although the knot locations can be specified to coincide with apparent breaks in the curvature of the rating. The basis functions themselves are not affected by the distribution of the response variable (flow).  
 
 The linear form of the basis functions used in the analysis can be written as:  
 
 $$ flow(stage_i) = {\displaystyle \sum_{n=0}^{4} b_j(stage_i) \space \beta_j + \varepsilon_i} $$
+
+where $b_j(stage_i)$ refers to the j^th^ basis function, $\varepsilon_i$ is the residual from the model estimate.  
 
 ### Specification of a Cubic Regression Spline within a Generalized Additive Modelling Framework
 
@@ -840,11 +857,11 @@ print('First 6 rows of data in data.frame rating18')
 print( head( rating18 ))
 ```
 
-Once the gam model is estimated, the spline parameters (coefficients) and basis functions can be extracted from the gamObject. The spline parameters can be extracted using the function *coefficients* as coefficients( gamObject ). Two ways to extract the basis functions that form the design matrix $Z$ are presented. The *model.matrix* function can be used to extract the basis functions used in model development as $Z = $ model.matrix( gamObject ). In this case, a (design) matrix is returned with the number of rows equal to the number of observations in the data set used to estimate the gam model. The number of columns returned equals the number of knots in the spline.  The first column in the design matrix is a column of ones corresponding to the intercept. Alternatively, a design matrix can be obtained by use of the *predict* function, using the arguments $Z = $ predict( gamObject, newdata = data.frame( stage = ..., flow = ...), type = 'lpmatrix'  ). The *predict* function is a convenient way to generate basis functions for time series of unit or daily stage data used in computation of streamflow records, where *newdata* takes on time series  of stage (and flow) values. 
+Once the CRS is estimated, the spline parameters and basis functions can be extracted from the gamObject. The spline parameters can be extracted using the function *coefficients()* as coefficients( gamObject ). Two ways to extract the basis functions that form the design matrix $Z$ are presented. The *model.matrix()* function can be used to extract the basis functions used in model development as $Z$ = model.matrix( gamObject ). In this case, a (design) matrix is returned with the number of rows equal to the number of observations in the data set used to estimate the CRS model. The number of columns returned equals the number of knots in the spline.  The first column in the design matrix is a column of ones corresponding to the intercept. Alternatively, a design matrix can be obtained by use of the *predict()* function, using the arguments $Z$ = predict( gamObject, newdata = data.frame( stage = ..., flow = ...), type = 'lpmatrix'  ). The *predict()* function is a convenient way to generate basis functions for time series of unit or daily stage data used in computation of streamflow records, where *newdata* takes on time series  of stage (and flow) values. 
 
 ## State-Space Model
 
-A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *n* equal to the number of knots, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t.*  The states are updated from observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, $V$ and the variance of the flow measurement $R$ [@MARSS2020b]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
+A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *n* equal to the number of knots, $\vec{x}_{t}$ contains unobservable states, which here correspond to the five parameters of the CRS at time *t*, $\vec{beta}_t$.  The states are updated from discrete observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using variance of the state vector, $V$ and the variance of the flow measurement $R$ [@MARSS2020b]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
 
 
 $$
@@ -859,12 +876,12 @@ Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ 
 
 ### State Vector $\vec{x}_t$
 
-Vector $\vec{x}_t$ is the time series of state vectors, where each vector has a length of corresponding to the number of knots specified for the CRS. The state equation forecasts the transition of the state vector from time $t-1$ to $t$ as a random walk. The state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector. 
+$\vec{x}_t$ is the time series of state vectors, where each vector has a length of corresponding to the number of knots specified for the CRS. The state equation forecasts the transition of the state vector from time $t-1$ to $t$ as a random walk. The state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector. 
 
 
 ### Measurement Time Series $y_t$
 
-The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated GAM model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of the increase in forecast uncertainty. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
+The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated CRS model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible with flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* (Not Available or missing) value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of an increase in the length of the forecast. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
 
 ### Process Covariance Matrix $Q$
 
@@ -874,11 +891,9 @@ The process covariance reflects the increase in uncertainty with the forecast fr
 
 The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
 
-Daily time steps were used in this paper because the most frequent time between discrete flow measurements was 42 days. On average, therefore, there is one measurement update for each 42 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@MARSS2020b] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for simulation. 
+Daily time steps were used in this paper because the most frequent time between discrete flow measurements was 42 days. On average, therefore, there is one measurement update for each 42 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@MARSS2020b] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for estimation of streamflow records. 
 
-equation, and the reduction in variance in measurement equation $V_t^+$. If the process covariance is estimated by use of daily time steps, the resulting variance reflects the day to day increase in the uncertainty of the CRS parameters. If subsequently, the simulation time increment were to change to 15-minute intervals, for example, the daily process covariance divided by 96 is suggested as a suitable estimate of the unit process covariance. In this analysis, $Q$ is unknown, but estimated as diagonal matrix in various forms. 
-
-In this paper, the process covariance Q is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating GAM model, which is specified by the number of knots in the CRS. The covariance matrices took on four general forms that can be defined by special tags defined within the MARSS software [@MARSS2020b]. These tags include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained,' in which the tag provides a shortcut string to define a particular form of the matrix. For example, in the model specification, the process covariance matrix can be explicitly defined as: 'Q = 'diagonal and equal' or explicitly as 'Q =  A custom form of Q is referred to in this paper as the 'std diagonal multiplier' form for standardized diagonal multiplier, but this nomenclature is not meaningful within the MARSS software. The diagonal forms are based on the assumption that changes in parameter values are independent. Estimation of off-diagonal terms, however, may be more consistent with covariance effects among parameters, and some of these forms are estimated and evaluated. The forms of these matrices are illustrated and discussed below. 
+In this paper, the process covariance $Q$ is a $5\times5$ matrix, corresponding to the dimension of the state vector. The state vector represents the 5 parameters in the initiating CRS model. The covariance matrices took on four general forms that can be defined by special tags defined within the MARSS software [@MARSS2020b]. These tags include 'diagonal and equal', 'diagonal and unequal', 'equalvarcov', 'unconstrained,' in which the tag provides a shortcut string to define a particular form of the matrix. For example, in the model specification, the process covariance matrix can be explicitly defined as: 'Q = 'diagonal and equal' or explicitly, as discussed below for the 'std diagonal multiplier' form for standardized diagonal multiplier. The diagonal forms are based on the assumption that changes in parameter values are independent. Estimation of off-diagonal terms, however, may be more consistent with covariance effects among parameters, and some of these forms are estimated and evaluated. The forms of these matrices are illustrated and discussed below. 
 
 #### Forms of Q
 
@@ -1680,7 +1695,7 @@ tab_no <- tab_no + 1
 marss_compare %>%
   mutate( Model = seq(1, 9)) %>% 
   arrange( AIC ) %>% 
-  # mutate( Model = seq( 1, nrow( marss_compare ))) %>% 
+  mutate( Model = seq( 1, nrow( marss_compare ))) %>% 
   dplyr::select( Model, everything() ) %>% 
   kable( caption = paste0('Table ', tab_no,'. Summary statistics from Multivariate Autoregressive State-Space Models of Flow.'),
          col.names = c('Model', 'Process, Q', 'Measure-ment, R', 'Parameter Estima-tion Method', 
@@ -1796,7 +1811,7 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 
 ## Changes in Cubic Regression Spline Parameters with Discrete Measurements    
 
-Figure `r fig_no + 1` shows the changes in basis parameters at times of discrete measurement. All parameter series followed a random walk, given that an identity matrix premultiplied $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis.  At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 8.    
+Figure `r fig_no + 1` shows the smoothed changes in basis parameters with times of discrete measurements. All parameter series followed a random walk, given that an identity matrix premultiplied $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis.  At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 9.    
 
 ```{r, state_parameter_matrix, fig.height = 10, fig.width = 9 }
 
@@ -1813,14 +1828,14 @@ marss_state_tT %>%
   gather( key = 'Parameter', value = 'Estimate', -Date) %>% 
   ggplot( aes( x = Date, y = Estimate, group = Parameter )) +
   geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_DFM ], color = 'lightblue' ) +
-  geom_step() +
+  geom_step( direction = "hv" ) +
   theme_bw() +
   xlab( 'Date') + 
   ylab( 'State Estimates') +
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 1, Parameter ~ ., scales = 'free',
               labeller = label_bquote(beta [.(Parameter) ] ) ) +
-  ggtitle( label = paste0('Figure ', fig_no, '. Step plot of discrete changes in the state vector of basis parameters on days of discrete measurements.') ,
+  ggtitle( label = paste0('Figure ', fig_no, '. Time series plot of smoothed estimates of cubic regression spline parameters making up the state vector.') ,
            subtitle = 'Vertical lines indicate dates of discrete flow measurements.')
 
 
@@ -1875,7 +1890,8 @@ ndx_allDays_measDays <- which( df_stage_flow_allDays$Date %in% discrete_meas$Dat
 tmp <- df_discrete_meas %>%
   # mutate( Date = measurement_dt ) %>% 
   addWaterYear() %>% 
-  filter( waterYear %in% sel_yr)
+  filter( waterYear %in% sel_yr) %>% 
+  mutate( waterYear = factor(waterYear))
 
 fig_no <- fig_no + 1
 adaptive_rating_measDays %>% 
@@ -1894,7 +1910,7 @@ adaptive_rating_measDays %>%
   labs(title = 'Stage-Flow Ratings at 04122500 Pere Marquette River at Scottville, MI') +
   geom_line( data = rating18, aes( x = rated18_flow, y = stage, group = NULL), color = 'red', size = 0.5 ) +
   geom_line( data = rating21, aes( x = rated21_flow, y = stage, group = NULL), color = 'forestgreen', size = 0.5 ) +
-  geom_point( data = tmp, aes( x = flow_discrete_mea, y = stage_discrete_mea, color = factor(waterYear))) +
+  geom_point( data = tmp, aes( x = flow_discrete_mea, y = stage_discrete_mea, color = waterYear)) +
   theme( legend.position = 'bottom') +
   ggtitle( label = paste0('Figure ', fig_no, '. Annual rating adaptations to discrete measurements of stage and flow'))
 
@@ -1988,7 +2004,7 @@ lmtT  <- summary(with(df_DFM, lm(ytT  ~ ytm)))
 ** Kalman Estimators **  
 Three Kalman estimates are include in this analysis: forecast $\hat{y}_{t}^{t-1}$ , filtered $\hat{y}_{t}^{t}$, and smoothed. $\hat{y}_{t}^{T}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
  
-Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($R_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($R_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($R_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average `r format( mean(df$days_between_measurements), digits = 3)` days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
+Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($r_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($r_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($r_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average `r format( mean(df$days_between_measurements), digits = 3)` days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
 
 
 ```{r  kalman_estimators_plt, fig.height = 6, fig.width = 7}
@@ -2043,12 +2059,13 @@ df_DFM[, c('Date', 'ett1', 'ett', 'etT')] %>%
 
 # Conclusions   
 
-Cubic regression splines (CRSs) were developed in a generalized additive modelling environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of discrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (R^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures was heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
+CRSs developed in a GAM environment provide a basis for developing stage-flow rating relations from data in extended rating tables, or in discrete stage-flow measurement pairs.  In this paper, CRSs developed with five knots closely approximated manually developed rating relations. The CRS parameters (coefficients) and linear basis functions can be used as an initial rating relations for an adaptive rating embedded in a state-space model. Pairs of discrete stage-flow measurements were used 
 
-CRSs also were developed by use of paired stage-flow discrete measurement data obtained during the corresponding rating period. These regressions also approximated the  
- 
 
-The Cubic Spline Regessions (CRSs) developed within a generalized additive modelling (GAM) framework provided a flexible and accurate method for estimating the stage-flow relation at a streamgage either directly from an expanded stage-flow rating table, or from discrete pairs of stage-flow measurements. The GAM environment produced a set of parameter estimates for the CRSs and a method for generating basis vectors from stage data.  The CRS parameters were used as the state vector in the state equation of a state-space model. The set basis vectors formed a design matrix that premultiplied the state vector in the measurement equation to compute flow.  The process covariance matrix $Q$ in the state equation and measurement variance $R$ in the measurement equation were estimated by use of discrete measurements of stage and flow.  
+
+CRSs were developed in a GAM environment to estimate stage-flow relations during rating periods 18 through 21 for USGS streamgage 04122500 Pere Marquette River at Scottville, Mich.  Regressions for all rating periods were developed using stage-flow data from expanded (0.01 ft increments of stage) rating tables, and from pairs of discrete stage and flow measurements obtained during the corresponding rating period.  The curves formed by the CRSs and the rating tables matched closely as indicated by a coefficient of determination (r^2^ value) of approximately 1. The indicated uncertainties of these CRSs curves, however, were uninterpretable because the uncertainty measures were heavily influenced by the arbitrary discretization interval (0.01 ft) for the stage data. Still, the parameters of these rating curves may have utility in automatically adapting existing stage-flow relations developed manually to on-going stage-flow changes with subsequent discrete measurement data.  
+
+CRSs developed within a GAM framework provided a flexible and accurate method for estimating the stage-flow relation at a streamgage either directly from an expanded stage-flow rating table, or from discrete pairs of stage-flow measurements. The GAM environment produced a set of parameter estimates for the CRSs and a method for generating basis vectors from stage data.  The CRS parameters were used as the state vector in the state equation of a state-space model. The set basis vectors formed a design matrix that premultiplied the state vector in the measurement equation to compute flow.  The process covariance matrix $Q$ in the state equation and measurement variance $R$ in the measurement equation were estimated by use of discrete measurements of stage and flow.  
 
 
 # Appendices  
