@@ -1,5 +1,5 @@
 ---
-title: "Adapting Rating Curves for Persistent Changes in Stage-Flow Relations and Characterizing Uncertainties of Streamflow Records with Discrete Measurements"
+title: "Adapting Rating Curves to Persistent Changes in Stage-Flow Relations and Characterizing Uncertainties of Streamflow Records with Discrete Measurements"
 author: "David J Holtschlag"
 date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
@@ -1811,23 +1811,33 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 
 ## Changes in Cubic Regression Spline Parameters with Discrete Measurements    
 
-Figure `r fig_no + 1` shows the smoothed changes in basis parameters with times of discrete measurements. All parameter series followed a random walk, given that an identity matrix premultiplied $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis.  At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 9.    
+Figure `r fig_no + 1` shows the time series of changes in Kalman filter and smoother estimates of basis parameters with times of discrete measurements, which are indicated by vertical grey lines. Note that the filter estimates are shown as step plot because parameter estimates only change at times of discrete measurements. In contrast, the smoother estimates change linearly between measurements because information before and after the time of estimation are used in the computation. 
 
-```{r, state_parameter_matrix, fig.height = 10, fig.width = 9 }
+All parameter series followed a random walk, which is expected because an identity matrix premultiplies $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time, and the filter and smoother estimates are in close agreement. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis. In addition, the match between filter and smoother estimates generally decreases with the higher parameter numbers. The beginning and ending points for all parameters are nearly the same. The differences in filter and smoother estimates may reflect parameter sensitivity. At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 9.    
 
-# marss_state_tT is the estimate of the state at time t given all time T
-marss_state_tT           <- data.frame( t(as.matrix( marss_kf$xtT, ncol = 5, nrow = 10966)))
-marss_state_tT$Date      <- flow_daily_pub$Date
-colnames(marss_state_tT) <- c('0', '1', '2', '3', '4', 'Date')
+```{r, state_parameter_matrix, fig.height = 11, fig.width = 9 }
+
+# marss_state_tt is the estimate of the state at time t given up to time t
+marss_state_tt             <- data.frame( t(as.matrix( marss_kfss$xtt, ncol = 5, nrow = 10966)))
+
+# marss_state_tt is the estimate of the state at time t given all time T
+marss_state_tT             <- data.frame( t(as.matrix( marss_kf$xtT,   ncol = 5, nrow = 10966)))
+colnames(marss_state_tT)   <- colnames(marss_state_tt)
+
+marss_state                <- bind_rows( marss_state_tt, marss_state_tT)
+marss_state$Kalman         <- rep(c('Filter','Smoother' ), each = 10966 )
+
+marss_state$Date           <- flow_daily_pub$Date
+colnames(marss_state)[1:5] <- c('0', '1', '2', '3', '4')
 
 # Identify days of Discrete Flow Measurement (# # # DFM # # #)
 ndx_DFM <- which( !is.na( df_stage_flow_allDays$flow_discrete_mea ) )
 
 fig_no <- fig_no + 1
-marss_state_tT %>% 
-  gather( key = 'Parameter', value = 'Estimate', -Date) %>% 
-  ggplot( aes( x = Date, y = Estimate, group = Parameter )) +
-  geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_DFM ], color = 'lightblue' ) +
+marss_state %>% 
+  gather( key = 'Parameter', value = 'Estimate', -Date, -Kalman ) %>% 
+  ggplot( aes( x = Date, y = Estimate, color = Kalman ) ) +
+  geom_vline( xintercept = df_stage_flow_allDays$Date[ ndx_DFM ], color = 'grey' ) +
   geom_step( direction = "hv" ) +
   theme_bw() +
   xlab( 'Date') + 
@@ -1835,7 +1845,7 @@ marss_state_tT %>%
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 1, Parameter ~ ., scales = 'free',
               labeller = label_bquote(beta [.(Parameter) ] ) ) +
-  ggtitle( label = paste0('Figure ', fig_no, '. Time series plot of smoothed estimates of cubic regression spline parameters making up the state vector.') ,
+  ggtitle( label = paste0('Figure ', fig_no, '. Time series plot of Kalman estimates of cubic regression spline \n parameters making up the state vector.') ,
            subtitle = 'Vertical lines indicate dates of discrete flow measurements.')
 
 
@@ -1925,17 +1935,20 @@ adaptive_rating_measDays %>%
 
 
 ```{r plot_daily_flow_se, fig.width = 12, fig.height = 20 }
+
+# Selected years to plot
 sel_yr <- seq(from = 1990, to = 2019, by = 3)
 
-
 fig_no <- fig_no + 1
+
+suppressMessages(
 df_stage_flow_allDays %>% 
   dplyr::filter( waterYear %in% sel_yr ) %>% 
   mutate( y_ice = pmin(flow_daily_pub, exp(ytT)) ) %>%  
   ggplot( aes( x = Date  )) +
   geom_line( aes( y = exp(ytT) ), color = 'red' ) +
-  suppressWarnings(geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 )) +
-  suppressWarnings(geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  )) +
+  suppressWarnings({geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 )}) +
+  suppressWarnings({geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  )}) +
   geom_line( aes( y = exp(cl025) ), color = 'blue', size = 0.5) +
   geom_line( aes( y = exp(cl975) ), color = 'blue', size = 0.5) +
   geom_line(  aes( y = flow_daily_pub ), color = 'darkgreen', size = 0.7) +
@@ -1947,7 +1960,7 @@ df_stage_flow_allDays %>%
   theme( legend.position = 'bottom') +
   facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
   ggtitle( paste0('Figure ', fig_no, '. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
-           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.') )
+           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.') ) )
 
 
 ```
@@ -2031,7 +2044,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t} $, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t}$, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
