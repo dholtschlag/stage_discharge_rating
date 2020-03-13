@@ -238,6 +238,16 @@ if( file.exists('flow_daily_pub.RData')){
 
 flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
+# Compute day of year
+flow_daily_pub$yday <- yday(flow_daily_pub$Date)
+
+yday_Flow_cd <- as.data.frame( table( as.integer(flow_daily_pub$yday) , flow_daily_pub$Flow_cd), 
+                               col.names = c('day_number', 'Flow_cd', 'freq'))
+
+colnames(yday_Flow_cd) <- c('day_number', 'Flow_cd', 'freq') 
+
+yday_Flow_cd$day_number <- as.integer( yday_Flow_cd$day_number )
+
 ```
 
 ***  
@@ -1811,9 +1821,11 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 
 ## Changes in Cubic Regression Spline Parameters with Discrete Measurements    
 
-Figure `r fig_no + 1` shows the time series of changes in Kalman filter and smoother estimates of basis parameters with times of discrete measurements, which are indicated by vertical grey lines. Note that the filter estimates are shown as step plot because parameter estimates only change at times of discrete measurements. In contrast, the smoother estimates change linearly between measurements because information before and after the time of estimation are used in the computation. 
+Figure `r fig_no + 1` shows the time series of changes in Kalman filter and smoother estimates of basis parameters computed on the basis of model 9. Times of discrete measurements are indicated by vertical grey lines. Note that the filter estimates are shown as a step plot (horizontal lines between measurements, and vertical lines at measurements) because filter estimates only change at times of discrete measurements. In contrast, the smoother estimates change linearly between measurements because information before and after the time of estimation are used in the computation. 
 
-All parameter series followed a random walk, which is expected because an identity matrix premultiplies $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time, and the filter and smoother estimates are in close agreement. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis. In addition, the match between filter and smoother estimates generally decreases with the higher parameter numbers. The beginning and ending points for all parameters are nearly the same. The differences in filter and smoother estimates may reflect parameter sensitivity. At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. The parameter time series are based state-space Model 9.    
+All parameter series followed a random walk, which is determined by the (implied) identity matrix premultipling $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time, and the filter and smoother estimates are in close agreement. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis. In addition, the match between filter and smoother estimates generally decreases with the higher parameter numbers. The beginning and ending points for all parameters are nearly the same. 
+
+Differences between filter and smoother estimates may reflect differences in parameter sensitivities, with greater differences indicating lower sensitivities. In particular, the increasing drift tracked similarly by both the filter and smoother estimates of $\beta_{0}$ may reflect the gradual shift to the right evident in ratings 18 through 21. The remaining parameters are likely associated with differences in the curvature at varying stages of the rating, which are less prominent. Given the relatively large differences between filtered and smoothed estimates for higher numbered parameters (like $\beta_{3} \ \beta_{4}$), fewer parameters may be needed to approximate the changes in this rating. Correlation among parameters is not thought to adversely effect estimation. At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. Future research may help better understand the implications of differences between filtered and smoothed estimates, the number of parameters (knots) needed in the CRS, and the ability to localize changes in curvature of the rating. 
 
 ```{r, state_parameter_matrix, fig.height = 11, fig.width = 9 }
 
@@ -1929,9 +1941,9 @@ adaptive_rating_measDays %>%
 
 ## Streamflow Magnitude and Uncertainty Computed by Kalman filter for the Selected State-Space Model  
 
+Figure `r fig_no + 1` shows daily flow information and discrete measurements for selected years at streamgage 04122500 Pere Marquette River at Scottville, Mich.  Flow information includes published daily mean flow, the Kalman smoothed flow estimate with a 95-percent confidence interval. A (grey) shaded region indicates ice-affected streamflow, which was computed as the region between the minimum of published daily flow and Kalman smoothed flow estimate. The indicated ice-affected streamflow predominately occurs during winter periods, consistent with ice-affected conditions, but also includes some periods that may not be ice effected. Circled dots indicate discrete flow measurements with those qualifier 'Good' shown in green, and those qualifed as 'Fair' shown in orange.  
 
-
-
+The Kalman smoothed estimates of flow and the associated confidence interval were generally based on the mean of unit stage values for the day. On days of discrete measurements, however, the daily mean stage was taken as the discrete measurement of stage. In contrast, published daily mean flows are based on the average of unit flows computed from unit stage values, except during ice-affected periods when unit stage may be an unreliable indicator of flow. Kalman filter and smoother estimates of flow magnitude and uncertainty can also be computed on the basis of unit stage values by changing values in the process covariance matrix $Q$ proportionately to the change in the length of the unit intervals. In areas where the published daily mean flow is not visible, it is generally overlain by the Kalman smoother estimate of flow. 
 
 
 ```{r plot_daily_flow_se, fig.width = 12, fig.height = 20 }
@@ -1941,29 +1953,113 @@ sel_yr <- seq(from = 1990, to = 2019, by = 3)
 
 fig_no <- fig_no + 1
 
-suppressMessages(
-df_stage_flow_allDays %>% 
+df_stage_flow_iceDays <- df_stage_flow_allDays %>% 
+  left_join( flow_daily_pub[, c('Date', 'Flow_cd')] , by = 'Date') %>% 
+  mutate( log_pub_flow = log(flow_daily_pub) )
+
+ndx_A  <- which(df_stage_flow_iceDays$Flow_cd == 'A')
+
+ndx_in <-   which(df_stage_flow_iceDays$log_pub_flow >= df_stage_flow_iceDays$cl025  &
+               df_stage_flow_iceDays$log_pub_flow <  df_stage_flow_iceDays$cl975 )
+
+in95ci <- length(ndx_in)/length(ndx_A) * 100
+
+df_stage_flow_meaDays <- df_stage_flow_allDays %>% 
+  dplyr::filter( waterYear %in% sel_yr ) %>%
+  dplyr::filter( !is.na(flow_discrete_mea ) )
+
+df_stage_flow_selDays  <- df_stage_flow_allDays %>% 
   dplyr::filter( waterYear %in% sel_yr ) %>% 
-  mutate( y_ice = pmin(flow_daily_pub, exp(ytT)) ) %>%  
-  ggplot( aes( x = Date  )) +
-  geom_line( aes( y = exp(ytT) ), color = 'red' ) +
-  suppressWarnings({geom_point(aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 )}) +
-  suppressWarnings({geom_point(aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  )}) +
-  geom_line( aes( y = exp(cl025) ), color = 'blue', size = 0.5) +
-  geom_line( aes( y = exp(cl975) ), color = 'blue', size = 0.5) +
-  geom_line(  aes( y = flow_daily_pub ), color = 'darkgreen', size = 0.7) +
-  geom_ribbon( aes(ymin = y_ice, ymax = exp(ytT) ), fill = 'grey', alpha = 0.5  ) +
-  theme_bw() +
-  scale_y_log10() +
-  xlab( 'Date') + 
-  ylab( 'Daily mean streamflow, in cubic feet per second') +
-  theme( legend.position = 'bottom') +
+  mutate( Ice        = pmin(flow_daily_pub, exp(ytT)),
+          Smooth_Exp = exp(ytT),
+          Smooth_025 = exp(cl025),
+          Smooth_975 = exp(cl975)) %>% 
+  gather( key = 'Computed', value = 'Flow', flow_daily_pub, Smooth_Exp, Smooth_025, Smooth_975, Ice, -Date) 
+
+df_stage_flow_filDays  <- df_stage_flow_allDays %>% 
+  dplyr::filter( waterYear %in% sel_yr ) %>% 
+  mutate( Ice        = pmin(flow_daily_pub, exp(ytT)),
+          Smooth_Exp = exp(ytT))
+
+df_stage_flow_selDays %>% 
+  ggplot( aes( x = Date ) ) +
+  geom_line( aes(y = Flow, color = Computed ) ) +
   facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
+  geom_ribbon(data = df_stage_flow_filDays, aes(ymin = Ice, ymax = Smooth_Exp ), 
+              fill = 'grey', alpha = 0.5  ) +
+  theme_bw() +
+  theme( legend.position = 'bottom')  +
+  scale_y_log10() +
+  geom_point(data = df_stage_flow_meaDays, aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 ) +
+  geom_point(data = df_stage_flow_meaDays, aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  ) +
+  scale_color_manual( labels =  c('Fair discrete measurement', 'Published daily mean flow',
+                                 'Good discrete measurement', 'Ice-affected flow', 
+                                 'Lower 95% smoothed flow',   'Upper 95% smoothed flow',
+                                 'Expected smoothed flow' ),
+                      values = c('orange', 'blue', 'forestgreen', 'grey', '#CD5E77', '#CD5E77',  'red') ) +
+  scale_linetype_manual( values = c(NA, 'solid', NA, 'solid', 'solid', 'solid', 'solid', 'dashed')) +
+  labs( x= 'Date', y = 'Daily mean streamflow, in cubic feet per second', color = 'Flow Metric:') + 
   ggtitle( paste0('Figure ', fig_no, '. Daily mean expected streamflow (red) with 95-percent confidence intervals (blue) based on adaptive spline \nrating model with historically published streamflow (green).',
-           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.') ) )
+           subtitle = 'Grey filled areas between published and expected daily flow primarily show ice affects.') )
+
+  
+  # ggplot(   data   = df_stage_flow_selDays, aes(x = Date  )) +
+  # geom_line(data   = df_stage_flow_selDays, aes( y = exp(ytT) ),   color = 'red' ) +
+  # geom_line(data   = df_stage_flow_selDays, aes( y = exp(cl025) ), color = 'blue', size = 0.5) +
+  # geom_line(data   = df_stage_flow_selDays, aes( y = exp(cl975) ), color = 'blue', size = 0.5) +
+  # geom_line(data   = df_stage_flow_selDays, aes( y = flow_daily_pub ), color = 'darkgreen', size = 0.7) +
+  # geom_ribbon(data = df_stage_flow_selDays, aes(ymin = y_ice, ymax = exp(ytT) ), fill = 'grey', alpha = 0.5  ) +
+  # theme_bw() +
+  # scale_y_log10() +
+  # geom_point(data = df_stage_flow_meaDays, aes( y = flow_discrete_mea,   color = qualifier), size = 1.5 ) +
+  # geom_point(data = df_stage_flow_meaDays, aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  ) +
+  # xlab( 'Date') + 
+  # ylab( 'Daily mean streamflow, in cubic feet per second') +
+  # theme( legend.position = 'bottom') +
+  # # guides( color = guide_legend( order = 1 )) +
+  # facet_wrap( ncol = 2, waterYear ~ ., scales = 'free' ) +
+  # 
 
 
 ```
+
+Figure `r fig_no + 1` shows a stacked histogram of the frequency of computed and estimated daily mean flows that were published during the 30-year period of analysis.  Flow is considered computed when unit stage data is available and used with an applicable open-water rating to determine flow. Otherwise, daily mean flow is estimated by other technical means, but is considered less accurate than computed flows. The accuracy of the Kalman smoother estimates were assessed 
+
+The 95-percent confidence interval about the Kalman smoother estimate was used to assess the accuracy of the Kalman smoother magnitude and uncertainty. only computed streamflow values the uncertainty of the published daily flow is a consideration, but not is not quantified. Days within the 30-year period of analysis in    
+
+
+```{r yday_Flow, fig.height = 4, fig.width = 8}
+
+# yday_Flow_cd %>% 
+
+# https://stackoverflow.com/questions/55525965/is-there-a-r-function-to-calculate-day-of-water-year
+hydro.day.new = function(x, start.month = 10L){
+  start.yr = year(x) - (month(x) < start.month)
+  start.date = make_date(start.yr, start.month, 1L)
+  as.integer(x - start.date + 1L)
+}
+
+
+fig_no <- fig_no + 1
+flow_daily_pub[ 2:10958,] %>%   
+  mutate( wy_day  = hydro.day.new(Date),
+          Flow_cd = recode_factor(Flow_cd, 'A'   = 'Computed',
+                                           'A e' = 'Estimated',
+                                           'P'   = 'Preliminary' )) %>% 
+  ggplot( aes( x = wy_day, fill = Flow_cd )) +
+  geom_histogram( binwidth = 1, alpha = 0.7 ) + 
+  scale_x_continuous( breaks = cumsum(c(1, 31, 30, 31,  31,  28,  31,  30,  31,  30,  31,  31,  30)),
+                      labels = c("Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep",'Oct' )) +
+  theme_bw() +
+  scale_fill_manual( labels =  c('Computed', 'Estimated'), values = c('grey', 'red')) +
+  geom_vline( xintercept = c(62, 166), color = 'blue', alpha = 0.5) +
+  annotate('text', x = 116, y = 27, label = 'Possible Ice-\nAffected Flow') +
+  labs( x = 'Day in Water Year', y = 'Frequency', color = 'Flow Qualifier') +
+  ggtitle( paste0('Figure ', fig_no, '. Distribution of days in which streamflow at 04122500 Pere \nMarquette River at Scottville, Mich. was computed or estimated. ') )
+
+
+```
+
 
 
 ```{r kalman_estimators, fig.height = 6, fig.width = 7}
@@ -2033,6 +2129,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
   scale_color_manual( values = c('red', 'olivedrab', 'slateblue1')) +
   theme_bw() +
   geom_abline( intercept = 0, slope = 1) +
+  annotate('text', x = 3000, y = 4500, label = 'Line of agreement') +
   scale_x_log10() +
   scale_y_log10() +
   labs(x = 'Discrete Flow Measurement, in cubic feet per second',
@@ -2044,7 +2141,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t}$, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information to information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t}$, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
