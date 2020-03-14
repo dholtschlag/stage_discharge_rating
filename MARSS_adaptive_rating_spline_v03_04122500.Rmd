@@ -5,9 +5,11 @@ date: "`r format(Sys.Date(), '%A %b %d, %Y') `"
 output: 
   html_document:
     toc: true
-    toc_depth: 4
-    toc_float: true
-  always_allow_html: yes
+    toc_float: false
+    toc_collapsed: false
+toc_depth: 4
+number_sections: true
+theme: lumen
 bibliography: bibliography.bib
 ---
 
@@ -85,10 +87,10 @@ knitr::opts_chunk$set(echo = FALSE, fig.width = 8)
 
 ```{r specify_gage, echo = FALSE, results = 'hide' }
 
-# The starting and ending dates of the model
+# The starting and ending dates of the period of analysis
 #   Based on the beginning of unit stage date and endin on the first flow measurement of water year 2020
-date_beg_model  <- as.Date( '1989-09-30', format = '%Y-%m-%d' ) 
-date_end_model  <- as.Date( '2019-10-08', format = '%Y-%m-%d' )
+date_beg_POA  <- as.Date( '1989-10-01', format = '%Y-%m-%d' ) 
+date_end_POA  <- as.Date( '2019-09-30', format = '%Y-%m-%d' )
 
 # initialize counter for figures
 fig_no <- 0
@@ -120,6 +122,8 @@ if( file.exists(site_file)){
 
 
 ```{r show_site_info, fig.height = 2, warning = 'hide', results = 'hide', eval = FALSE }
+
+# Rename columns with more descriptive names
 
 site_info %>% 
   rename( drain_area_mi2 = drain_area_va,
@@ -218,7 +222,7 @@ Historically, unit stage and flow values have been considered ancillary data of 
 
 ## Daily Streamflow
 
-Daily mean streamflow data for the Pere Marquette River were obtained for the period of record using the USGS National Water Information System (NWIS) accessed by use of the R package 'dataRetrieval' [@DeCicco2019]. Some of the earlier ancillary data used in computing daily mean flows, however, is only available from archived paper records. In particular, unit stage data and discrete flow measurement data are generally available for Pere Marquette River in electronic format since `r format(date_beg_model, '%b %d, %Y')`. The most recent data used in the analysis was `r format(date_beg_model, '%b %d, %Y')`. In this paper, the period of electronic data availability is referred to as the period of analysis (POA). Data summaries presented in the following sections are restricted to this period.
+Daily mean streamflow data for the Pere Marquette River were obtained for the period of record using the USGS National Water Information System (NWIS) accessed by use of the R package 'dataRetrieval' [@DeCicco2019]. Some of the earlier ancillary data used in computing daily mean flows, however, is only available from archived paper records. In particular, unit stage data and discrete flow measurement data are generally available for Pere Marquette River in electronic format since `r format(date_beg_POA, '%b %d, %Y')`. The most recent data used in the analysis was `r format(date_beg_POA, '%b %d, %Y')`. In this paper, the period of electronic data availability is referred to as the period of analysis (POA). Data summaries presented in the following sections are restricted to this period.
 
 
 
@@ -227,10 +231,13 @@ Daily mean streamflow data for the Pere Marquette River were obtained for the pe
 if( file.exists('flow_daily_pub.RData')){
   # print('Loading published daily_means from RData file.')
   load('flow_daily_pub.RData')
+  # Trim data to 30-year POA
+  ndx_keep       <- which(flow_daily_pub$Date >= date_beg_POA & flow_daily_pub$Date <= date_end_POA)
+  flow_daily_pub <- flow_daily_pub[ndx_keep, ]
 } else {
   # print('Retrieving daily flow from NWIS')
-  flow_daily_pub <- readNWISdv( site_no, parameterCd = '00060', startDate = date_beg_model,
-                             endDate = date_end_model)
+  flow_daily_pub <- readNWISdv( site_no, parameterCd = '00060', startDate = date_beg_POA,
+                             endDate = date_end_POA)
   # Standardize names
   flow_daily_pub <- renameNWISColumns( flow_daily_pub )
   save(flow_daily_pub, file = 'flow_daily_pub.RData')
@@ -239,14 +246,35 @@ if( file.exists('flow_daily_pub.RData')){
 flow_hpdi <- HPDI( flow_daily_pub$Flow, prob = 0.95 )
 
 # Compute day of year
-flow_daily_pub$yday <- yday(flow_daily_pub$Date)
+# https://stackoverflow.com/questions/55525965/is-there-a-r-function-to-calculate-day-of-water-year
+hydro.day.new = function(x, start.month = 10L){
+  start.yr = year(x) - (month(x) < start.month)
+  start.date = make_date(start.yr, start.month, 1L)
+  as.integer(x - start.date + 1L)
+}
 
-yday_Flow_cd <- as.data.frame( table( as.integer(flow_daily_pub$yday) , flow_daily_pub$Flow_cd), 
-                               col.names = c('day_number', 'Flow_cd', 'freq'))
+# Calendar year day number
+flow_daily_pub$cy_day  <- yday(flow_daily_pub$Date)
 
-colnames(yday_Flow_cd) <- c('day_number', 'Flow_cd', 'freq') 
+# Water year day number
+flow_daily_pub$wy_day  <- hydro.day.new(flow_daily_pub$Date)
 
-yday_Flow_cd$day_number <- as.integer( yday_Flow_cd$day_number )
+# Recode flow codes to more descriptive terms
+flow_daily_pub$Flow_cd <- recode_factor(flow_daily_pub$Flow_cd, 'A'   = 'Computed',
+                                       'A e' = 'Estimated',    'P'   = 'Preliminary' )
+ 
+# Use table function to create summary of flow codes by water year day number
+flow_daily_pub_cd      <- as.data.frame( table( as.integer(flow_daily_pub$wy_day) , flow_daily_pub$Flow_cd))
+
+# Provide descriptive names to data columns
+colnames(flow_daily_pub_cd) <- c('wy_day', 'Flow_cd', 'freq') 
+
+# Provide month-day character tags to water year day numbers. Note: Repeats three times automatically
+flow_daily_pub_cd$mo_day    <- as.character( format( seq.Date(from = as.Date('2011-10-01'), 
+                                                              to = as.Date('2012-09-30'), 
+                                                              length.out = 366), '%b-%d'))
+# Convert water year day from factor to integer
+flow_daily_pub_cd$wy_day <- as.integer( flow_daily_pub_cd$wy_day )
 
 ```
 
@@ -290,7 +318,7 @@ flow_daily_pub %>%
   #                                   ', thres = ', format( gam3_parm$estimate[3], digits = 4),' )'), color = 'red', size = 3.8) +
   annotate('segment', x = 450, y = 1.10, xend = 570, yend = 1.10, color = 'red' ) +
   annotate('text', x = 1250, y = 0.10, label = 'Empirical Density', size = 3 ) +
-  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at Scottsdale, \n Mich. based on data from ', format(date_beg_model, '%B %d, %Y'), ' to ', format(date_end_model, '%B %d, %Y')) ) 
+  ggtitle( paste0( 'Figure ', fig_no, '. Distribution of daily flows at 04122500 Pere Marquette River at Scottsdale, \n Mich. based on data from ', format(date_beg_POA, '%B %d, %Y'), ' to ', format(date_end_POA, '%B %d, %Y')) ) 
 
 ```
 
@@ -364,7 +392,7 @@ discrete_meas <- discrete_meas %>%
                                              Date >= rating_history$start_date[2] & Date <  rating_history$end_date[2] ~ 19,
                                              Date >= rating_history$start_date[3] & Date <  rating_history$end_date[3] ~ 20,
                                              Date >= rating_history$start_date[4] & Date <  rating_history$end_date[4] ~ 21),
-         'period_of_analysis'  =  ifelse( Date >= date_beg_model & Date <= date_end_model, TRUE, FALSE)) %>% 
+         'period_of_analysis'  =  ifelse( Date >= date_beg_POA & Date <= date_end_POA, TRUE, FALSE)) %>% 
   dplyr::select( 'Date', 'measurement_nu', 'stage_discrete_mea', 'flow_discrete_mea', 'qualifier', 
                  'control_type', 'rating_no', 'period_of_analysis', 'se_pct', 'se_flow') %>% 
   addWaterYear()
@@ -396,9 +424,9 @@ discrete_meas %>%
   scale_y_log10( ) +
   scale_x_date( breaks =        seq(as.Date("1985/1/1"), as.Date("2020/1/1"), by = "5 years"),
                 labels = format(seq(as.Date("1985/1/1"), as.Date("2020/1/1"), by = "5 years"), '%Y')) +
-  # geom_vline( xintercept = c(date_beg_model, date_end_model), linetype = 'dashed') +
+  # geom_vline( xintercept = c(date_beg_POA, date_end_POA), linetype = 'dashed') +
   # geom_vline( xintercept = as.Date( c('1986-10-01', '1994-10-25', '2011-03-01', '2013-10-01')) , color = 'blue') + 
-  # annotate('segment', x = date_beg_model, xend = date_end_model, y = 3500, yend = 3500 ) +
+  # annotate('segment', x = date_beg_POA, xend = date_end_POA, y = 3500, yend = 3500 ) +
   ylab( paste0('Stage, in feet above ', site_info$alt_va, ' ', site_info$alt_datum_cd,
   '                           Flow, in cubic feet per second') )  +
   ggtitle( paste0('Figure ', fig_no, '. Discrete flow measurements at 04122500 Pere Marquette River at Scottville, \n Mich. during the period with accessible discrete measurement data.') )
@@ -434,7 +462,7 @@ table( discrete_meas$control_type, discrete_meas$qualifier ) %>%
           nrow(discrete_meas))) %>% 
   kable( digits = 4, 
          caption = paste0('Table ', tab_no, '. Frequency of flow measurements by stream channel control type and flow measurement qualifiers at ',
-         site_info$site_no, ' ', site_info$station_nm, 'from ', date_beg_model, ' to ', date_end_model),
+         site_info$site_no, ' ', site_info$station_nm, 'from ', date_beg_POA, ' to ', date_end_POA),
          col.names = c( 'Excellent', 'Good', 'Fair', 'Poor', 'Total') ) %>%
   kable_styling() %>% 
   add_header_above(c("Type of Control" = 1, "Discrete Flow Measurement Qualifier" = 4, ' '), align = 'center') %>% 
@@ -560,7 +588,7 @@ stage_day <- stage_day %>%
 # Measured flows and daily stages for the interval when rating 19 was active
 #  Note: Discrete measurement timing is approximated to days
 
-df_stage_flow_allDays <- data.frame(day = seq.Date(from = date_beg_model, to = date_end_model, by = '1 day'))
+df_stage_flow_allDays <- data.frame(day = seq.Date(from = date_beg_POA, to = date_end_POA, by = '1 day'))
 
 # calculate_mode function from https://exploratory.io/note/kanaugust/1701090969905358
 #   Used in subsequent summarize
@@ -586,7 +614,7 @@ df_stage_flow_allDays <-df_stage_flow_allDays %>%
                                   'qualifier', 'control_type', 'se_pct', 'se_flow')], 
              by = c( 'day'  = 'Date')) %>% 
   left_join( stage_day[, c('day_date', 'stage_daily_mean')], by = c( 'day' = 'day_date' )) %>% 
-  filter( day >= date_beg_model & day <= date_end_model )
+  filter( day >= date_beg_POA & day <= date_end_POA )
 
 
 ```
@@ -819,7 +847,7 @@ rating_long %>%
   
 ```
 
-# Methods for Adapting Stage-Flow Ratings and Estimating the Magnitudes and Uncertainties of Streamflow Records
+# Methods for Adapting Stage-Flow Ratings and Estimating Uncertainties of Streamflow  
 
 A CRS can be used to approximate either an existing rating from an extended rating table, or to develop a new rating from a set of discrete stage-flow measurements representing unobstructed (typical) flow conditions at a streamgage. A generalized additive modelling (GAM) framework[@Wood2006] provides a basis for assessing the statistical significance of individual CRS parameters and provides measures of the accuracy of the CRS model.  Parameters of the CRS, $\vec{\beta}$, form the state vector of the state equation, which together with the measurement equation form the state-space model. In this analysis, estimates of the process covariance $Q$ and measurement variance $R$ parameters in the state-space model are based at daily time steps. In applications, unit time steps could be used with adjustments to the $Q$ parameters in the state equation that are proportional to changes in the length of the time intervals. 
 
@@ -951,7 +979,7 @@ $$ R = \bar{r} = mean(R_t[qualifier]) $$
 $$ R = \hat{r} \: for \ all \ t, \ where \ \hat{r} \ is \ estimated \ in \ MARSS \ based \ on \ the \ discrete \ flow \ data. $$
 
 
-The design matrix ${Z}_{t}$ is a $10966\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+The design matrix ${Z}_{t}$ is a $10957\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
 
 ### Functions used in MARSS (Multivariate Autoregressive State-Space) Modelling 
 
@@ -982,7 +1010,7 @@ Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman 
 The function *MARSSparamCIs* was used to add standard errors, and confidence intervals, for the for the maximum likelihood parameters [@MARSS2020b].  Owing to extended computational requirements, the function *MARSSboot* was used to assess parameter bias only on the selected state-space model.   
 
 
-# Results of Cubic Regression Splines and State-Space Modeling
+# Results and Discussion  
 
 ## Cubic Regression Splines
  
@@ -1252,7 +1280,7 @@ basis_rat %>%
 
 ```
 
-### Cubic Regression Splines for Rating Periods 18 - 21  
+### Cubic Regression Splines for Rating Periods 18 through 21  
 
 
 Figure `r fig_no + 1` shows the GAM stage-flow ratings for rating periods 18-21 along with 95-percent confidence intervals for the rating line based on the discrete measurements obtained during the rating period.  The corresponding manual rating is shown for comparison along with the discrete measurements for the rating period. The GAM and manual ratings appear fairly consistent for each rating period, despite the fact that the GAM ratings have no information about discrete flow measurements outside the corresponding rating period. The widening confidence interval widths at higher stage show the utility of discrete measurements in reducing the uncertainty of the relation. 
@@ -1621,9 +1649,13 @@ if ( file.exists( 'marss_fit_Q_diag_unequal_R_series_specified_var.rds' )){
 }
 ```
 
-## State-Space Modeling Results  
+## State-Space Modeling    
 
 Modeling results include the selection of the form of the state-space model form, the depiction of changes in the state (CRS parameters) over time, the effect of parameter changes on the shape and fit of the stage-flow relation indicated by the CRS, and the estimation of magnitude and uncertainty of streamflow records.  
+
+### Development of State-Space Models
+
+
 
 ### Selection of a state-space model  
 
@@ -1732,7 +1764,7 @@ marss_compare %>%
 
 ```
 
-# Application of the Selected State-Space Model
+# Application of the CRS State-Space Model  
 
 ```{r eval_state_space}
 
@@ -1740,16 +1772,14 @@ marss_compare %>%
 # marss_fit   <- marss_fit_QdiagUnequal_Rseries
 # marss_fit <- marss_fit_QdiagEqual_RdiagEqual
 marss_fit   <- marss_fit_Q_ones_multiplier_R_series_qualifier
-marss_kf    <- MARSSkf( marss_fit )
-# MARSSdfss needed for xtt
+# marssdf   needed for xtT
+marss_kf    <- MARSSkf(   marss_fit )
+# MARSSkfss needed for xtt, Innov, J, J0, Kt, Sigma, Vtt
 marss_kfss  <- MARSSkfss( marss_fit )
-# kfss function provids Innov, J, J0, Kt, Sigma, Vtt
-# marss_kfss  <- MARSSkfss( marss_fit )
 
+df_stage_flow_allDays$ytT    <- marss_fit$ytT[1, 2:10958 ]
 
-df_stage_flow_allDays$ytT    <- marss_fit$ytT[1, ]
-
-df_stage_flow_allDays$ytT.se <- marss_fit$ytT.se[, ]
+df_stage_flow_allDays$ytT.se <- marss_fit$ytT.se[, 2:10958 ]
 
 # df_stage_flow_allDays$Kt     <- marss_kfss$Kt
 
@@ -1830,14 +1860,14 @@ Differences between filter and smoother estimates may reflect differences in par
 ```{r, state_parameter_matrix, fig.height = 11, fig.width = 9 }
 
 # marss_state_tt is the estimate of the state at time t given up to time t
-marss_state_tt             <- data.frame( t(as.matrix( marss_kfss$xtt, ncol = 5, nrow = 10966)))
+marss_state_tt             <- data.frame( t(as.matrix( marss_kfss$xtt[,2:10958], ncol = 5, nrow = 10957)))
 
 # marss_state_tt is the estimate of the state at time t given all time T
-marss_state_tT             <- data.frame( t(as.matrix( marss_kf$xtT,   ncol = 5, nrow = 10966)))
+marss_state_tT             <- data.frame( t(as.matrix( marss_kf$xtT[,2:10958],   ncol = 5, nrow = 10957)))
 colnames(marss_state_tT)   <- colnames(marss_state_tt)
 
 marss_state                <- bind_rows( marss_state_tt, marss_state_tT)
-marss_state$Kalman         <- rep(c('Filter','Smoother' ), each = 10966 )
+marss_state$Kalman         <- rep(c('Filter','Smoother' ), each = 10957 )
 
 marss_state$Date           <- flow_daily_pub$Date
 colnames(marss_state)[1:5] <- c('0', '1', '2', '3', '4')
@@ -1941,7 +1971,7 @@ adaptive_rating_measDays %>%
 
 ## Streamflow Magnitude and Uncertainty Computed by Kalman filter for the Selected State-Space Model  
 
-Figure `r fig_no + 1` shows daily flow information and discrete measurements for selected years at streamgage 04122500 Pere Marquette River at Scottville, Mich.  Flow information includes published daily mean flow, the Kalman smoothed flow estimate with a 95-percent confidence interval. A (grey) shaded region indicates ice-affected streamflow, which was computed as the region between the minimum of published daily flow and Kalman smoothed flow estimate. The indicated ice-affected streamflow predominately occurs during winter periods, consistent with ice-affected conditions, but also includes some periods that may not be ice effected. Circled dots indicate discrete flow measurements with those qualifier 'Good' shown in green, and those qualifed as 'Fair' shown in orange.  
+Figure `r fig_no + 1` shows daily flow information and discrete measurements for selected years at streamgage 04122500 Pere Marquette River at Scottville, Mich.  Flow information includes published daily mean flow, the Kalman smoothed flow estimate with a 95-percent confidence interval. A (grey) shaded region indicates ice-affected streamflow, which was computed as the region between the minimum of published daily flow and Kalman smoothed flow estimate. The indicated ice-affected streamflow predominately occurs during winter periods, consistent with ice-affected conditions, but also includes some periods that may not be ice effected. Circled dots indicate discrete flow measurements with those qualifier 'Good' shown in green, and those qualified as 'Fair' shown in orange.  
 
 The Kalman smoothed estimates of flow and the associated confidence interval were generally based on the mean of unit stage values for the day. On days of discrete measurements, however, the daily mean stage was taken as the discrete measurement of stage. In contrast, published daily mean flows are based on the average of unit flows computed from unit stage values, except during ice-affected periods when unit stage may be an unreliable indicator of flow. Kalman filter and smoother estimates of flow magnitude and uncertainty can also be computed on the basis of unit stage values by changing values in the process covariance matrix $Q$ proportionately to the change in the length of the unit intervals. In areas where the published daily mean flow is not visible, it is generally overlain by the Kalman smoother estimate of flow. 
 
@@ -1957,7 +1987,7 @@ df_stage_flow_iceDays <- df_stage_flow_allDays %>%
   left_join( flow_daily_pub[, c('Date', 'Flow_cd')] , by = 'Date') %>% 
   mutate( log_pub_flow = log(flow_daily_pub) )
 
-ndx_A  <- which(df_stage_flow_iceDays$Flow_cd == 'A')
+ndx_A  <- which(df_stage_flow_iceDays$Flow_cd == 'Computed')
 
 ndx_in <-   which(df_stage_flow_iceDays$log_pub_flow >= df_stage_flow_iceDays$cl025  &
                df_stage_flow_iceDays$log_pub_flow <  df_stage_flow_iceDays$cl975 )
@@ -1994,7 +2024,7 @@ df_stage_flow_selDays %>%
   geom_point(data = df_stage_flow_meaDays, aes( y = flow_discrete_mea ), size = 5, shape = 1, color = 'black'  ) +
   scale_color_manual( labels =  c('Fair discrete measurement', 'Published daily mean flow',
                                  'Good discrete measurement', 'Ice-affected flow', 
-                                 'Lower 95% smoothed flow',   'Upper 95% smoothed flow',
+                                 '2.5% smoothed flow limit',   '97.5% smoothed flow limit',
                                  'Expected smoothed flow' ),
                       values = c('orange', 'blue', 'forestgreen', 'grey', '#CD5E77', '#CD5E77',  'red') ) +
   scale_linetype_manual( values = c(NA, 'solid', NA, 'solid', 'solid', 'solid', 'solid', 'dashed')) +
@@ -2023,36 +2053,25 @@ df_stage_flow_selDays %>%
 
 ```
 
-Figure `r fig_no + 1` shows a stacked histogram of the frequency of computed and estimated daily mean flows that were published during the 30-year period of analysis.  Flow is considered computed when unit stage data is available and used with an applicable open-water rating to determine flow. Otherwise, daily mean flow is estimated by other technical means, but is considered less accurate than computed flows. The accuracy of the Kalman smoother estimates were assessed 
+Figure `r fig_no + 1` shows a stacked histogram of the frequency of computed and estimated daily mean flows on Pere Marquette River that were published during the 30-year period of analysis.  Flow is considered computed when unit stage data representative of open-water conditions is available from streamgage records, and used with an applicable open-water rating to determine flow. Otherwise, daily mean flow is estimated by other technical means, but is considered less accurate than computed flows. About 99.2 percent of estimated flow occurs during the 106 day period from December 1 to March 15 (fig. `r fig_no + 1`). During this period, about 42.1 percent of the daily mean flows are estimated. So, much of the estimated flow occurs during cold weather periods, which may result be the result of ice-affected flow conditions.
 
-The 95-percent confidence interval about the Kalman smoother estimate was used to assess the accuracy of the Kalman smoother magnitude and uncertainty. only computed streamflow values the uncertainty of the published daily flow is a consideration, but not is not quantified. Days within the 30-year period of analysis in    
+The consistency of the Kalman smoother estimates with published (computed) daily flows was evaluated by use of the 95-percent confidence intervals about the Kalman smoother estimates. In particular, if the computed daily flow was within the 95-percent confidence interval, the Kalman smoother and published values were considered consistent. This approach is intrinsically faulty for assessing accuracy because it ignores the uncertainties of the computed values, which are not available. Nevertheless, the results indicate that about `r format( in95ci, digits = 3)` percent of computed daily flows occur within this 95-percent Kalman smoother interval. It may be the case, therefore, that the interval about the Kalman smoother is too narrow, perhaps because some of the estimated $Q$ parameters are too small.  Alternatively, published (computed) daily flow may not always be well approximated by use of daily mean stage, which along with discrete measurements, is basis of the Kalman smoother estimates.  
 
 
 ```{r yday_Flow, fig.height = 4, fig.width = 8}
 
-# yday_Flow_cd %>% 
 
-# https://stackoverflow.com/questions/55525965/is-there-a-r-function-to-calculate-day-of-water-year
-hydro.day.new = function(x, start.month = 10L){
-  start.yr = year(x) - (month(x) < start.month)
-  start.date = make_date(start.yr, start.month, 1L)
-  as.integer(x - start.date + 1L)
-}
-
-
+# increment figure counter
 fig_no <- fig_no + 1
-flow_daily_pub[ 2:10958,] %>%   
-  mutate( wy_day  = hydro.day.new(Date),
-          Flow_cd = recode_factor(Flow_cd, 'A'   = 'Computed',
-                                           'A e' = 'Estimated',
-                                           'P'   = 'Preliminary' )) %>% 
+
+flow_daily_pub %>% 
   ggplot( aes( x = wy_day, fill = Flow_cd )) +
   geom_histogram( binwidth = 1, alpha = 0.7 ) + 
   scale_x_continuous( breaks = cumsum(c(1, 31, 30, 31,  31,  28,  31,  30,  31,  30,  31,  31,  30)),
                       labels = c("Oct","Nov","Dec","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep",'Oct' )) +
   theme_bw() +
-  scale_fill_manual( labels =  c('Computed', 'Estimated'), values = c('grey', 'red')) +
-  geom_vline( xintercept = c(62, 166), color = 'blue', alpha = 0.5) +
+  scale_fill_manual( labels =  c('Computed', 'Estimated'), values = c('grey80', 'red')) +
+  geom_vline( xintercept = c(62, 167), color = 'blue', alpha = 0.5) +
   annotate('text', x = 116, y = 27, label = 'Possible Ice-\nAffected Flow') +
   labs( x = 'Day in Water Year', y = 'Frequency', color = 'Flow Qualifier') +
   ggtitle( paste0('Figure ', fig_no, '. Distribution of days in which streamflow at 04122500 Pere \nMarquette River at Scottville, Mich. was computed or estimated. ') )
@@ -2167,9 +2186,28 @@ df_DFM[, c('Date', 'ett1', 'ett', 'etT')] %>%
 
 
 
-# Conclusions   
+# Summary and Conclusions
 
-CRSs developed in a GAM environment provide a basis for developing stage-flow rating relations from data in extended rating tables, or in discrete stage-flow measurement pairs.  In this paper, CRSs developed with five knots closely approximated manually developed rating relations. The CRS parameters (coefficients) and linear basis functions can be used as an initial rating relations for an adaptive rating embedded in a state-space model. Pairs of discrete stage-flow measurements were used 
+Stage and flow data from the U.S. Geological Survey streamgage 04122500 Pere Marquette River at Scottville, Michigan, were used to develop a methodology to automatically adapt a stage-flow rating to persistent changes in the relation.  Electronically accessible unit stage, published daily mean flow, discrete measurements pairs of stage and flow, and extended rating table data for ratings 18, 19, 20, and 21 were utilized to track changes in the stage-flow relation across the 30-year period of analysis from Oct. 1, 1989 to September 30, 2019. 
+
+Cubic regression splines (CRSs) estimated in a generalized additive modelling (GAM) framework provided a basis for developing a set of stage-flow ratings from data in extended rating tables, and from data in sets of discrete stage-flow measurement pairs. A set of five parameter (five knot) CRSs was developed with corresponding static linear basis functions, determined from stage values. The CRSs provided equations for predicting flow at these initial conditions. Parameters from the CRS developed by use of the extended rating table 18 was selected to represent initial rating conditions. 
+
+With persistent change, however, initial stage-flow ratings become biased estimators of flow over time. This bias can be detected on the basis of continuing discrete measurements of stage and corresponding flow.  A strategy was developed to adapt ratings to persistent changes by making the parameters of the CRS equation time varying, but leaving the basis functions unchanged. 
+
+To implement this strategy, a state-space model, which contains a state equation and a measurement equation, was utilized. The state and measurement equations are solved alternately for each time step in the analysis.  
+
+The CRS parameter vector formed the state vector in the state equation. The state equation provides a forecast of the state vector for the next time step by characterizing random temporal disturbances in the state (parameter) vector, which is quantified by an estimated process covariance matrix $Q$. After the temporal update, the state vector is premultiplied by basis functions in measurement equation, to match a discrete flow measurement, if one is available, on that time step. Difference between the predicted and measured flow, in logarithm units, provides a basis for estimating the measurement variance $R$, unless this uncertainty is specified.   
+
+Nine state-space models were estimated for different forms for the process covariance matrix and the measurement variance. A state-space model with an equal and diagonal  
+
+In this paper, CRSs developed with five knots, and five corresponding parameters, closely approximated manually developed rating relations. 
+
+The CRS parameters were made time varying to adapt the initial rating to persistent changes in the stage-flow relation using discrete measurements within a state-space modelling framework.
+
+
+
+
+Pairs of discrete stage-flow measurements were used 
 
 
 
