@@ -887,7 +887,7 @@ gamObject <- gam( flow        ~ s(stage,             bs = 'cr', k = knts),
 |:                        |:    cubic regression spline [@mgcv2019]                                                                         |  
 |: k = knts         |: k is an input argument for the number of knots, which is specified in this analysis as 5. The preferred number of knots may vary among streamgages. |    
 |: data = [rating \| discrete pairs] |: The dataframe used in the analysis, which may be a rating table, are discrete stage-flow measurement pairs. 
-|: family = Gamma(link = log) |: A family is a parametric set of probability distributions of a certain form. In this case, the gamma distribution, which is a member of the exponential family, may be appropriate because the distribution of the natural logarithms of daily mean flows is consistent with the gamma distribution. |
+|: family = Gamma(link = log) |: A family is a parametric set of probability distributions of a certain form. In this case, the gamma distribution, which is a member of the exponential family, may be appropriate because the distribution of the natural logarithms of daily mean flows is consistent with the gamma distribution. 
 
 
 ```{r echo = FALSE, eval = FALSE }
@@ -899,26 +899,28 @@ Once the CRS is estimated, the spline parameters and basis functions can be extr
 
 ## State-Space Model
 
-A state-space model consists of two equations: a state equation, and a measurement equation. The left-hand-side state vector of length *m* equal to the number of knots, $\vec{x}_{t}$ contains unobservable states. In this analysis, the states correspond to time-varying parameters in the CRS at time *t*, $\vec{beta}_t$.  The states are updated from discrete observations in the measurement vector (scalar in this case) $\vec{y}_{t}$. These updates are based on the Kalman gain, computed using error covariance of the state vector, $V$ and the variance of the flow measurement $R$ [@MARSS2020b]. The state and measurement equations are solved alternately for each time step indexed by $t.$ The state-space model is written below:
+A state-space model consists of two equations: a state equation [1], and a measurement equation [2]. The state equation transitions the state vector  from time *t-1* to *t* as $\vec{x}_{t-1} \rightarrow \vec{x}_{t}$. In this analysis, the state transition matrix, $B$, is the identity matrix, which is included in [equation 1] for greater clarity in subsequent discussion of the Kalman filter. The measurement equation uses the updated state information and a time-varying design vector $z_t$ to estimate the response $y_t$. The state and measurement equations are solved alternately for each time step indexed by $t$ in the series.  
 
 
 $$
 \begin{align}
-\text{ State Equation:  } \vec{x}_{t}  &= \: \vec{x}_{t-1} +  \vec{w}_{t} && \text{where } \vec{w}_{t} \text{~} MVN(0, Q) \text{,}\\
- \text{Measurement Equation:  } y_{t} &=     \vec{Z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \text{~} N(0, R_{t}) \text{,}\\
+\text{ State Equation:  } \vec{x}_{t}  &= \: B\ \vec{x}_{t-1} +  \vec{w}_{t-1} && \text{where } \vec{w}_{t-1} \sim MVN(0, Q) \text{,}\tag{1}\\  
+ \text{Measurement Equation:  } y_{t} &=     \vec{z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \sim N(0, R_{t}) \text{,} \tag{2}\\
  \text{}
 \end{align}
 $$
-where $MVN(\vec0,Q)$ indicates a *Multi-Variate Normal* vector with mean $\vec{0}_{n}$, and process covariance $Q$.  
-Similarly, $N(0, R_{t})$ indicates a *Normally* distributed error with mean $0$ and scalar or time series measurement variance $R$ or $R_t$.  
 
 
 ### The State Equation  
 
-The state equation transitions (or forecasts) the state vector $\vec{x}_t$, of length $m$, from time $t-1$ to time $t$. Generally, a state transition matrix, $B_t$, can be time varying and premultiplies the state vector as: $\vec{x}_t = B_t \ \vec{x}_{t-1}$, where $B_t$ is specified or estimated. In this analysis, $B_t$ is taken as a constant identity matrix, $I_m$, which implies that the state vector is modeled as a random walk. For simplicity, $B$, is omitted in the state equation. 
+In this analysis, the state vector represents the five time-varying parameters in the cubic regression spline describing stage-flow relations. A logarithmic transformation is applied to flow before fitting the CRS. Initial values for the state vector, $\vec{x}_{0}$ were based the five parameters estimated for a cubic regression spline developed using extended rating 18 (Appendix 1).    
+
+The zero-mean uncorrelated time series $w_{t-1}$ has a multivariate normal (*MVN*) distribution with process covariance $Q_c$, and is considered to be time invariant. $Q_c$ represents the process covariance as the length of the time steps, $\Delta{t}$, tends to zero. The time series $w_t$ is an unbiased (zero mean) measurement error component with variance $R_t$. The variance of $R_t$ can be measured or specified.  
+
+The components of the state vector time series are not directly observable, but are estimated by use of the Kalman filter [@Simon2006]. The process covariance matrix and measurement variance series can be estimated by a maximum-likelhood algorithm for parameter estimation based on the Expectation-Maximization (EM) algorithm [@Holmes2013]. In addition, parameters of $Q$ and $R$ can also be estimated more quickly by a quasi-Newton method by use of the BFGS algorithm with the R function *optim()*.  Values in $R$ can also be specified based on a perceived percentage error associated with qualifiers specified by hydrographers making the flow measurement. 
 
 
-
+The state equation transitions (or forecasts) the state vector $\vec{x}_t$, of length $m$, from time $t-1$ to time $t$. Generally, a state transition matrix, $B$, can be time varying and premultiplies the state vector as: $\vec{x}_t = B \ \vec{x}_{t-1}$, where $B$ is specified or estimated. In this analysis, $B_t$ is taken as a constant identity matrix, $I_m$, which implies that the state vector is modeled as a random walk. For simplicity, $B$, is omitted in the state equation. 
 
 
 #### State Vector Time Series $\vec{x}_t$
@@ -927,7 +929,20 @@ $\vec{x}_t$ is the time series of state vectors, where each vector has a length 
 
 #### Process Covariance Matrix $Q$
 
-The random process noise vector $\vec{w}_t$ is assumed to have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and fixed covariance $Q$.  The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
+The noise vector $\vec{w}_{t-1}$ is assumed to be uncorrelated and have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and process covariance $Q_c$. Although the process covariance is assumed to be time invariant, the magnitudes of each element are dependent on the length of the discrete time step, $\Delta{t}$. In particular, [Simon2006] approximates the variablility as indicated in equation 3 [@Simon2006]. By extention, equations 
+
+$$
+\begin{align}
+\ Q &\approx \frac{Q_{day}}{\Delta{t}} & \text{where} \Delta{t} \rightarrow 1 \ \text{day, then} \ Q_c \approx Q_{day}
+\text{,}\tag{3}\\
+\ Q_{hour} &\approx \frac{Q_{day}}{24} \tag{4} \\ 
+\ Q_{15-min} &\approx \frac{Q_{hour}}{4} \tag{5} \\ 
+\end{align}
+$$
+
+
+The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
+
 
 The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are fundamentally biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
 
@@ -968,11 +983,9 @@ The standardized diagonal multiplier or 'std diagonal multiplier' form of the pr
 
 $$ Q_5 (std \ diagonal \ multiplier) =  \begin{bmatrix} '\hat{q}_{11}*q' & 0 & 0 & 0 & 0 \\ 0 & '\hat{q}_{22}*q' & 0 & 0 & 0 \\ 0 & 0 & '\hat{q}_{33}*q' & 0 & 0 \\ 0 & 0 & 0 & '\hat{q}_{44}*q' & 0 \\ 0 & 0 & 0 & 0 & '\hat{q}_{55}*q'\\ \end{bmatrix}$$
 
-### The Measurement Equation$
+### The Measurement Equation
 
 The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated CRS model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible with flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* (Not Available or missing) value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of an increase in the length of the forecast. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
-
-
 
 
 ### Measurement Variance $R$
@@ -2270,45 +2283,45 @@ CRSs developed within a GAM framework provided a flexible and accurate method fo
 
 ## Appendix 1. Summary output of generalized additive models for Ratings 18-21 based on extended rating tables and discrete measurement pairs. 
 
-** Summary output for the GAM developed on the basis of extended rating 18 data **
+** Summary output of CRSs developed in a GAM framework based on data in the extended data table for rating 18 **
 
 ```{r }
 summary(gam18_rating)
 ```
-** Summary output for the GAM developed on the basis of extended rating 19 data **
+** Summary output of CRSs developed in a GAM framework based on data in the extended data table for rating 19 **
 
 ```{r}
 summary(gam19_rating)
 ```
 
-** Summary output for the GAM developed on the basis of extended rating 20 data **
+** Summary output of CRSs developed in a GAM framework based on data in the extended data table for rating 20 **
 ```{r, echo = FALSE}
 summary(gam20_rating)
 
 ```
 
-** Summary output for the GAM developed on the basis of extended rating 21 data **
+** Summary output of CRSs developed in a GAM framework based on the extended data table for rating 21 **
 ```{r echo = FALSE}
 
 summary(gam21_rating)
 ```
 
-** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 18 **
+** Summary output of CRSs developed in a GAM framework based on data in discrete measurement pairs for rating 18 **
 ```{r echo = FALSE}
 summary(gam18_measPair)
 ```
 
-** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 19 **
+** Summary output of CRSs developed in a GAM framework based on data in discrete measurement pairs for rating 19 **
 ```{r echo = FALSE}
 summary(gam19_measPair)
 ```
 
-** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 20 **
+** Summary output of CRSs developed in a GAM framework based on data in discrete measurement pairs for rating 20 **
 ```{r echo = FALSE}
 summary(gam20_measPair)
 ```
 
-** Summary output for the GAM developed on the basis of discrete measurement pairs for rating period 21 **
+** Summary output of CRSs developed in a GAM framework based on data in discrete measurement pairs for rating 21 **
 ```{r echo = FALSE}
 summary(gam21_measPair)
 ```
@@ -2316,7 +2329,7 @@ summary(gam21_measPair)
 
 ## Appendix 2. Summary output for estimated state-space models.
 
-** Results for MARSS with Q 'equalvarcov' and R mean specified variance of discrete measurements  ** 
+** Summary output of MARSS with Q 'equalvarcov' and R mean specified variance of discrete measurements  ** 
 
 ```{r Model_05, echo = FALSE}
 
@@ -2332,7 +2345,7 @@ print( marss_fit_Q_equalvarcov_R_mean_qualifierCI )
 
 ```
 
-** Results for MARSS model with Q 'diagonal and equal' and R mean specified variance **
+** Summary output of MARSS model with Q 'diagonal and equal' and R mean specified variance **
 
 ```{r Model_03, echo = FALSE}
 
@@ -2349,7 +2362,7 @@ print( marss_fit_Q_ones_multiplier_R_mean_qualifierCI )
 
 ```
 
-** Results for MARSS model with Q diagonal with covariance multiplier and R mean specified variance of discrete measurements **
+** Summary output of MARSS model with Q diagonal with covariance multiplier and R mean specified variance of discrete measurements **
 
 ```{r Model_07, echo = FALSE}
 
@@ -2364,7 +2377,7 @@ print( marss_fit_Q_covar_multiplier_R_mean_qualifierCI )
 
 ```
 
-** Results for MARSS with Q 'unconstrained' and R mean specified variance of discrete measurements **
+** Summary output of MARSS with Q 'unconstrained' and R mean specified variance of discrete measurements **
 
 ```{r Model_04, echo = FALSE}
 
@@ -2379,7 +2392,7 @@ print( marss_fit_Q_unconstrained_R_mean_qualifierCI )
 
 ```
 
-** Results for MARSS model with Q diagonal with covariance multiplier and R 'diagonal and equal' ** 
+** Summary output of MARSS model with Q diagonal with covariance multiplier and R 'diagonal and equal' ** 
 
 ```{r Model_06, echo = FALSE}
 
@@ -2395,7 +2408,7 @@ print( marss_fit_Q_covar_multiplier_R_one_multiplierCI )
 
 ```
 
-** Results for MARSS Model with Q 'diagonal and unequal' and R 'diagonal and equal' **
+** Summary output of MARSS Model with Q 'diagonal and unequal' and R 'diagonal and equal' **
 ```{r Model_02, echo = FALSE}
 
 if ( file.exists( 'marss_fit_Q_unequal_scalars_R_one_multiplierCI.rds' )){
@@ -2410,7 +2423,7 @@ print( marss_fit_Q_unequal_scalars_R_one_multiplierCI )
 
 ```
 
-** Results for MARSS Model with Q = 'diagonal and equal' and R = 'diagonal and equal' **  
+** Summary output of MARSS Model with Q = 'diagonal and equal' and R = 'diagonal and equal' **  
 
 ```{r Model_01, echo = FALSE}
 
@@ -2426,7 +2439,7 @@ print( marss_fit_Q_ones_multiplier_R_one_multiplierCI )
 ```
 
 
-** Results for MARSS Model with Q diagonal with scalar covariance multiplier and R time varying specified measurement variance**  
+** Summary output of MARSS Model with Q diagonal with scalar covariance multiplier and R time varying specified measurement variance**  
 
 ```{r Model_09, echo = FALSE}
 
@@ -2442,7 +2455,7 @@ print( marss_fit_Q_covar_multiplier_R_series_qualifierCI )
 ```
 
 
-** Results for MARSS Model with Q 'diagonal and equal', and R time varying specified measurement variance **  
+** Summary output of MARSS Model with Q 'diagonal and equal', and R time varying specified measurement variance **  
 
 ```{r Model_08, echo = FALSE}
 
