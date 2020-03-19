@@ -917,7 +917,7 @@ In this analysis, the state vector represents the five time-varying parameters i
 
 The zero-mean uncorrelated time series $w_{t-1}$ has a multivariate normal (*MVN*) distribution with process covariance $Q_c$, and is considered to be time invariant. $Q_c$ represents the process covariance as the length of the time steps, $\Delta{t}$, tends to zero. The time series $w_t$ is an unbiased (zero mean) measurement error component with variance $R_t$. The variance of $R_t$ can be measured or specified.  
 
-The components of the state vector time series are not directly observable, but are estimated by use of the Kalman filter [@Simon2006]. The process covariance matrix and measurement variance series can be estimated by a maximum-likelhood algorithm for parameter estimation based on the Expectation-Maximization (EM) algorithm [@Holmes2013]. In addition, parameters of $Q$ and $R$ can also be estimated more quickly by a quasi-Newton method by use of the BFGS algorithm with the R function *optim()*.  Values in $R$ can also be specified based on a perceived percentage error associated with qualifiers specified by hydrographers making the flow measurement. 
+The components of the state vector time series are not directly observable, but are estimated by use of the Kalman filter [@Simon2006]. The process covariance matrix and measurement variance series can be estimated by a maximum-likelihood algorithm for parameter estimation based on the Expectation-Maximization (EM) algorithm [@Holmes2013]. In addition, parameters of $Q$ and $R$ can also be estimated more quickly by a quasi-Newton method by use of the BFGS algorithm with the R function *optim()*.  Values in $R$ can also be specified based on a perceived percentage error associated with qualifiers specified by hydrographers making the flow measurement. 
 
 
 The state equation transitions (or forecasts) the state vector $\vec{x}_t$, of length $m$, from time $t-1$ to time $t$. Generally, a state transition matrix, $B$, can be time varying and premultiplies the state vector as: $\vec{x}_t = B \ \vec{x}_{t-1}$, where $B$ is specified or estimated. In this analysis, $B_t$ is taken as a constant identity matrix, $I_m$, which implies that the state vector is modeled as a random walk. For simplicity, $B$, is omitted in the state equation. 
@@ -929,16 +929,19 @@ $\vec{x}_t$ is the time series of state vectors, where each vector has a length 
 
 #### Process Covariance Matrix $Q$
 
-The noise vector $\vec{w}_{t-1}$ is assumed to be uncorrelated and have a multivariate-normal distribution (MVN) with mean $\vec{0}$ and process covariance $Q_c$. Although the process covariance is assumed to be time invariant, the magnitudes of each element are dependent on the length of the discrete time step, $\Delta{t}$. In particular, [Simon2006] approximates the variablility as indicated in equation 3 [@Simon2006]. By extention, equations 
+In a continuous-time representation of the discrete state-space equations [1 and 2], $\vec{w}_{t}$ is an uncorrelated time series vector defined at infinitesimal intervals of $Delta{t}$. The $\vec{w}$ has a multivariate-normal distribution (MVN) distribution with a mean equal to $\vec{0}$ and process covariance $Q_c$.  In transitioning to a discrete process covariances $Q_d$, where $\Delta{t}$ is a defined positive value, [@Simon2006] provides the approximation shown in equation [3], where   
 
 $$
 \begin{align}
-\ Q &\approx \frac{Q_{day}}{\Delta{t}} & \text{where} \Delta{t} \rightarrow 1 \ \text{day, then} \ Q_c \approx Q_{day}
-\text{,}\tag{3}\\
-\ Q_{hour} &\approx \frac{Q_{day}}{24} \tag{4} \\ 
-\ Q_{15-min} &\approx \frac{Q_{hour}}{4} \tag{5} \\ 
+\ Q_c &\approx \frac{Q_d}{\Delta{t}} \text{,}\tag{3}\\
+\text{where } Q_c  &= \text{ is the continuous-time process covariance,} \\
+Q_d &= \text{ is the discrete-time process covariance, } \\
+\ \Delta{t} &= \text{the length of the discrete time step.}\\ 
 \end{align}
 $$
+
+In this analysis, parameters for $Q_d$ were estimated at daily time steps for the 10,957 days within the period of analysis based on 222 intervening discrete measurements. This strategy avoided the need to estimate  referenced as $Q_{day}$.  
+It follows from equation [3] that discrete process defined  $Q_{hour} \approx Q_{day}/24$, or that $Q_{15-min} \approx Q_{hour}/4$ would be appropriate for simulation of unit streamflow data given that $\Delta{t}$ is infinitesimal for $Q_c$.  This implies that elements of $Q_{day}$, derived from parameter estimation in MARSS, can be divided by the number of unit intervals in a day, to simulate flow magnitudes and uncertainties based on unit stage values. 
 
 
 The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
