@@ -927,7 +927,7 @@ $$
 \begin{align}
 \ Q_c &\approx \frac{Q_d}{\Delta{k}} \text{,}\tag{3}\\
 \text{where } Q_c  &= \text{ is the continuous-time process covariance,} \\
-Q_d &= \text{ is the discrete-time process covariance, } \\
+Q_d &= \text{ is the discrete-time process covariance associated with a particular time step } $\Delta{k}$ \text{,} \\
 \ \Delta{k} &= \text{the length of the discrete time step.}\\ 
 \end{align}
 $$
@@ -993,11 +993,24 @@ $$ Q_5 (std \ diagonal \ multiplier) =  \begin{bmatrix} '\hat{q}_{11}*q' & 0 & 0
 
 ### Measurement Equation
 
-The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated CRS model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible with flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* (Not Available or missing) value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of an increase in the length of the forecast. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
+In the measurement equation, the transitioned state vector $\vec{x}_{k}$ is premultiplied by a row vector $\vec{z}_k$ that is the five-element basis function, which forms the design array time series $Z_k$. 
+
+#### Streamflow Time Series $y_k$  
+
+The scalar measurement time series $y_k$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_k$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated CRS model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible with flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* (Not Available or missing) value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of an increase in the length of the forecast. 
+
+
+
+In *R*, $y_t$ is defined as a 1 $\times$ 10957 matrix of flow information for all days spanning the 30-year period of analysis. On days of discrete flow measurements, the elements contain the natural logarithm of the measured flow, in cubic feet per second. Otherwise, the elements contain the indicator *NA*, indicating that there was no discrete measurement of flow on that day. In this analysis, $y_t$ matrix was composed of mostly (98.3 percent) *NA* indicators. 
+
+#### Design Matrix $Z_t$  
+
+In *R*, $Z_t$ is defined as a 1 $\times$ 5 $\times$ 10957 array the design matrix formed by the daily time series of basis functions. The basis functions are derived from the CRS based for the GAM rating 18 computed using the rating table. Daily values for the basis function were predicted using daily mean stage, except on days with discrete measurements. On these days, the discrete measured stage was substituted for the daily mean value.  
+
 
 When using the Kalman filter (KF) to solve the state-space equation, the state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector.
 
-### Measurement Variance $R$
+#### Measurement Variance $R$
 
 The random measurement noise scalar time series $v_{k}$ is assumed to be normally distributed with mean 0 and variance $R$. The measurement variance $R$ reflects the uncertainties in discrete measurements of flow.  The scalar value of R can be thought of as a constant for all discrete measurements, or as a time series with accuracies varying among measurements. There are many factors that can affect the accuracy of a streamflow measurement including the type and condition of equipment used, the characteristics of the flow measurement section, how rapidly the stage is changing during the flow measurement, the presence of ice or debris, other environmental conditions during the measurement, and the experience and subjective evaluation by the hydrographer making the measurement [@rantz1982]. The difficulty in quantifying the uncertainty in the field is related to subjectively and consistently assessing the accuracy of the measurement. 
 
