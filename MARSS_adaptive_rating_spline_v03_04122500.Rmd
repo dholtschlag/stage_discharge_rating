@@ -899,57 +899,62 @@ Once the CRS is estimated, the spline parameters and basis functions can be extr
 
 ## State-Space Model
 
-A state-space model consists of two equations: a state equation [1], and a measurement equation [2]. The state equation transitions the state vector  from time *t-1* to *t* as $\vec{x}_{t-1} \rightarrow \vec{x}_{t}$. In this analysis, the state transition matrix, $B$, is the identity matrix, which is included in [equation 1] for greater clarity in subsequent discussion of the Kalman filter. The measurement equation uses the updated state information and a time-varying design vector $z_t$ to estimate the response $y_t$. The state and measurement equations are solved alternately for each time step indexed by $t$ in the series.  
+A state-space model consists of two equations: a state equation [1], and a measurement equation [2], which can be written in either discrete or continuous forms.  The discrete-time state-space model is presented here because continual water-level measurements are obtained at unit (discrete) intervals, and computations used in state-space modeling are made by use of digital computers. The continuous-time state-space model is the limiting case of the discrete-time state-space model as the length of the time step from $k-1$ to $k$ ($\Delta{k}$) tends to zero [@Simon2006].
 
 
 $$
 \begin{align}
-\text{ State Equation:  } \vec{x}_{t}  &= \: B\ \vec{x}_{t-1} +  \vec{w}_{t-1} && \text{where } \vec{w}_{t-1} \sim MVN(0, Q) \text{,}\tag{1}\\  
- \text{Measurement Equation:  } y_{t} &=     \vec{z}_{t}{'} \text{ } \vec{x}_{t} + v_t && \text{where } v_t \sim N(0, R_{t}) \text{,} \tag{2}\\
+\text{ State Equation:  } \vec{x}_{k}  &= \: B\ \vec{x}_{k-1} +  \vec{w}_{k-1} && \text{where } \vec{w}_{k-1} \sim MVN(0, Q_d) \text{,}\tag{1}\\  
+ \text{Measurement Equation:  } y_{k} &=     \vec{z}_{k}{'} \text{ } \vec{x}_{k} + v_t && \text{where } v_t \sim N(0, R_{k}) \text{,} \tag{2}\\
  \text{}
 \end{align}
 $$
 
 
-### The State Equation  
+### State Equation  
 
-In this analysis, the state vector represents the five time-varying parameters in the cubic regression spline describing stage-flow relations. A logarithmic transformation is applied to flow before fitting the CRS. Initial values for the state vector, $\vec{x}_{0}$ were based the five parameters estimated for a cubic regression spline developed using extended rating 18 (Appendix 1).    
-
-The zero-mean uncorrelated time series $w_{t-1}$ has a multivariate normal (*MVN*) distribution with process covariance $Q_c$, and is considered to be time invariant. $Q_c$ represents the process covariance as the length of the time steps, $\Delta{t}$, tends to zero. The time series $w_t$ is an unbiased (zero mean) measurement error component with variance $R_t$. The variance of $R_t$ can be measured or specified.  
-
-The components of the state vector time series are not directly observable, but are estimated by use of the Kalman filter [@Simon2006]. The process covariance matrix and measurement variance series can be estimated by a maximum-likelihood algorithm for parameter estimation based on the Expectation-Maximization (EM) algorithm [@Holmes2013]. In addition, parameters of $Q$ and $R$ can also be estimated more quickly by a quasi-Newton method by use of the BFGS algorithm with the R function *optim()*.  Values in $R$ can also be specified based on a perceived percentage error associated with qualifiers specified by hydrographers making the flow measurement. 
-
-
-The state equation transitions (or forecasts) the state vector $\vec{x}_t$, of length $m$, from time $t-1$ to time $t$. Generally, a state transition matrix, $B$, can be time varying and premultiplies the state vector as: $\vec{x}_t = B \ \vec{x}_{t-1}$, where $B$ is specified or estimated. In this analysis, $B_t$ is taken as a constant identity matrix, $I_m$, which implies that the state vector is modeled as a random walk. For simplicity, $B$, is omitted in the state equation. 
-
+The purpose of the state equation is to transition (forecast) the state vector $\vec{x}$ from time $k-1$ to $k$. A state transition matrix $B$ may be specified or estimated. When $B$ is omitted, an identity matrix is implied, which results in the state vector being propagated through time as a random walk. The elements of the process noise vector $\vec{w}_{k-1}$ are unknown, and no attempt is made to estimate them. Instead, $\vec{w}_{k-1}$ is assumed to be a sequence of uncorrelated random vectors with a mean of zero, $\mathbf{E} \left[ \vec{w}_{k-1} \right] = \vec{0}$, and the time invariant process covariance $Q = \mathbf{E}[(X-\mathbf{E}[X]) \cdot \mathbf{E}(X-\mathbf{E}[X])^{\prime}]$ that arises from a multivariate-normal (MVN) probability distribution. The magnitudes of elements in various forms for the process covariance matrix, which are estimated, indicate how quickly the process changes over time.  For example, higher magnitudes of the process covariance elements would more likely be associated with a high gradient sand channel than with a weir. 
 
 #### State Vector Time Series $\vec{x}_t$
 
-$\vec{x}_t$ is the time series of state vectors, where each vector has a length of corresponding to the number of knots specified for the CRS.  The state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector.
+In this analysis, the state vector contains the five time-varying parameters in the CRS describing stage-flow relations. Initial values for the state vector, $\vec{x}_{0}$ were based the five parameters estimated for a CRS developed using extended rating 18 (Appendix 1). The state-vector is forecast to the next time step in the state equation, and used to compute flow in the measurement equation. 
 
 #### Process Covariance Matrix $Q$
 
-In a continuous-time representation of the discrete state-space equations [1 and 2], $\vec{w}_{t}$ is an uncorrelated time series vector defined at infinitesimal intervals of $Delta{t}$. The $\vec{w}$ has a multivariate-normal distribution (MVN) distribution with a mean equal to $\vec{0}$ and process covariance $Q_c$.  In transitioning to a discrete process covariances $Q_d$, where $\Delta{t}$ is a defined positive value, [@Simon2006] provides the approximation shown in equation [3], where   
+[@Simon2006] states that the continuous-time process covariance $Q_c$ is approximately equal to the discrete-time process covariance $Q_d$ divided by the length of the time step $\Delta{k}$, when $\Delta{k}$ is sufficiently small.  This equation provides a basis to approximate the change in $Q_d$ at different $\Delta{k}s$. 
 
 $$
 \begin{align}
-\ Q_c &\approx \frac{Q_d}{\Delta{t}} \text{,}\tag{3}\\
+\ Q_c &\approx \frac{Q_d}{\Delta{k}} \text{,}\tag{3}\\
 \text{where } Q_c  &= \text{ is the continuous-time process covariance,} \\
 Q_d &= \text{ is the discrete-time process covariance, } \\
-\ \Delta{t} &= \text{the length of the discrete time step.}\\ 
+\ \Delta{k} &= \text{the length of the discrete time step.}\\ 
 \end{align}
 $$
 
-In this analysis, parameters for $Q_d$ were estimated at daily time steps for the 10,957 days within the period of analysis based on 222 intervening discrete measurements. This strategy avoided the need to estimate  referenced as $Q_{day}$.  
-It follows from equation [3] that discrete process defined  $Q_{hour} \approx Q_{day}/24$, or that $Q_{15-min} \approx Q_{hour}/4$ would be appropriate for simulation of unit streamflow data given that $\Delta{t}$ is infinitesimal for $Q_c$.  This implies that elements of $Q_{day}$, derived from parameter estimation in MARSS, can be divided by the number of unit intervals in a day, to simulate flow magnitudes and uncertainties based on unit stage values. 
+In this analysis, parameters for the daily process covariance matrix $Q_d \equiv Q_day$  were estimated by using daily time steps for the 10,957 days within the 30-year period of analysis using intervening discrete stage-flow measurements. Based on equation [3], elements of the $Q_d$ matrix can be adjusted based on the size of $Delta{k}$ to compute streamflow records at unit of the stage data (equations [5] and [6]).  
+
+$$
+\begin{align}
+Q_{day} &\equiv Q_d  \text{,} \tag{4}\\
+Q_{hour} &\approx \frac{Q_{day}}{24} \text{,} \tag{5}\\
+Q_{15-min} &\approx \frac{Q_{hour}}{4} \text{,} \tag{6} \\
+\text{where } \ Q_{day}  &\text{ is the discrete-time process covariance derived during estimation of Q and R,} \\
+Q_{hour} \; &\text{ is the discrete-time process covariance applicable to computing hourly streamflow, } \\
+Q_{15-min} &\text{ is the discrete-time process covariance applicable to computing 15-minute streamflow. } \\
+\end{align}
+$$
+
+Estimating $Q$ and $R$ at a daily time step reduces the precision of the timing of discrete measurements,  This strategy avoided the need to estimate  referenced as $Q_{day}$.  
+It follows from equation [3] that discrete process defined  $Q_{hour} \approx Q_{day}/24$, or that $Q_{15-min} \approx Q_{hour}/4$ would be appropriate for simulation of unit streamflow data given that $\Delta{k}$ is infinitesimal for $Q_c$.  This implies that elements of $Q_{day}$, derived from parameter estimation in MARSS, can be divided by the number of unit intervals in a day, to simulate flow magnitudes and uncertainties based on unit stage values. 
 
 
 The process covariance matrix $Q$ increases the uncertainty of the state vector $\vec{x}_t$, which is characterized in the time-varying state covariance matrix $V_t$ [@simon2006].  
 
 
-The process covariance reflects the increase in uncertainty with the forecast from time $t-1$ to time $t$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are fundamentally biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
+The process covariance reflects the increase in uncertainty with the forecast from time $k-1$ to time $k$. According to [@MARSS2020a], the maximum likelihood estimates of $Q$ and $R$ are fundamentally biased, and this bias is more severe when either $Q$ or $R$ are small. This bias arises because variance is constrained to be positive, and this variance does not go to zero with increasing sample size. So that $Q$ was as large as practical while accurately identifying the timing of discrete measurements to the day, a daily time step was used for the estimation of $Q$. This discretization is thought to be adequate for describing the uncertainty of parameters of the rating curve. When estimating the uncertainty of unit flow magnitudes, however, linearity would be applied so that the daily $Q$ value would be divided by the number of unit time steps per day to better approximate the increase in variance of flow at unit time intervals.  
 
-The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{t-1}^{+}$, but before the measurement update $V_{t}^{-}$. If there is a discrete flow measurement at time $t$, the state covariance matrix is decreased by the information in the measurement to $V_{t}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
+The state equation update represents a forecast to the next time step, and the state covariance matrix reflects this uncertainty by increases in covariance matrix after the forecast $V_{k-1}^{+}$, but before the measurement update $V_{k}^{-}$. If there is a discrete flow measurement at time $k$, the state covariance matrix is decreased by the information in the measurement to $V_{k}^+$. Otherwise, there is no reduction in the state covariance, which continues to increase as a function of $Q$ until a discrete flow measurement occurs. The initial state covariance matrix can be initialized at time zero, $V_0^+$.  Generally, the initial value is set sufficiently large so that the state vector is appropriately sensitive to information in discrete measurements after time zero. More frequent discrete measurements decrease the state covariance matrix and increase the rate at which the rating relation can adapt to persistent changes.  A reduction in the state covariance matrix also reduces the uncertainty of the streamflow record. 
 
 Daily time steps were used in this paper because the most frequent time between discrete flow measurements was 42 days. On average, therefore, there is one measurement update for each 42 state updates in the alternating solution of the state space model. Estimating state-space model parameters at unit intervals would increase the computational burden of solving the state equation by one or two orders of magnitude using hour or 15-minute time steps were used. In addition, the estimation results may be degraded. In particular, [@MARSS2020b] note that when $Q$ (or $R$) gets very small, the bias in the maximum-likelihood estimates of variances becomes more severe. The magnitude of $Q$ is generally small ($<10^{-05}$) even at daily time steps. Alternatively, one might estimate $Q$ at daily time steps and divide $Q$ by the number of time steps in a day for estimation of streamflow records. 
 
@@ -986,14 +991,15 @@ The standardized diagonal multiplier or 'std diagonal multiplier' form of the pr
 
 $$ Q_5 (std \ diagonal \ multiplier) =  \begin{bmatrix} '\hat{q}_{11}*q' & 0 & 0 & 0 & 0 \\ 0 & '\hat{q}_{22}*q' & 0 & 0 & 0 \\ 0 & 0 & '\hat{q}_{33}*q' & 0 & 0 \\ 0 & 0 & 0 & '\hat{q}_{44}*q' & 0 \\ 0 & 0 & 0 & 0 & '\hat{q}_{55}*q'\\ \end{bmatrix}$$
 
-### The Measurement Equation
+### Measurement Equation
 
 The scalar measurement time series $y_t$ has a length equal to the number of days in the period of analysis. Although the series represents flow at daily increments of time, $y_t$ contains the natural logarithms of discrete flows, in cubic feet per second, on days of field measurements. The natural logarithm transformation makes the parameterization of the state-space model consistent with the associated CRS model. The natural logarithm is used in $y_t$ to help ensure that the measurement errors $v_t \sim N(0, R)$ and that (small) variances of flow measurements, which are based on percentages of measured flows, are compatible with flows modeled in natural logarithm units. On days when no flow measurement occurred, the elements in the vector contain an *NA* (Not Available or missing) value, so that no measurement update occurs to the state vector, although the state covariance matrix increases because of an increase in the length of the forecast. In this analysis, $y_t$ vector was composed of mostly (98.3 percent) *NA* indicators. 
 
+When using the Kalman filter (KF) to solve the state-space equation, the state-vector is updated only at times (on days) of discrete flow measurements. If the measurement vector contains a missing value indicator, the measurement update is skipped and the state vector is unchanged. The covariance of the state vector before the measurement update $V_t^-$, however, is incremented by $Q$ at each time step in the state equation, while  $V_t^+$ is state variance updated (reduced) only when discrete flow measurements are indicated in the $y_t$ vector.
 
 ### Measurement Variance $R$
 
-The random measurement noise scalar time series $v_{t}$ is assumed to be normally distributed with mean 0 and variance $R$. The measurement variance $R$ reflects the uncertainties in discrete measurements of flow.  The scalar value of R can be thought of as a constant for all discrete measurements, or as a time series with accuracies varying among measurements. There are many factors that can affect the accuracy of a streamflow measurement including the type and condition of equipment used, the characteristics of the flow measurement section, how rapidly the stage is changing during the flow measurement, the presence of ice or debris, other environmental conditions during the measurement, and the experience and subjective evaluation by the hydrographer making the measurement [@rantz1982]. The difficulty in quantifying the uncertainty in the field is related to subjectively and consistently assessing the accuracy of the measurement. 
+The random measurement noise scalar time series $v_{k}$ is assumed to be normally distributed with mean 0 and variance $R$. The measurement variance $R$ reflects the uncertainties in discrete measurements of flow.  The scalar value of R can be thought of as a constant for all discrete measurements, or as a time series with accuracies varying among measurements. There are many factors that can affect the accuracy of a streamflow measurement including the type and condition of equipment used, the characteristics of the flow measurement section, how rapidly the stage is changing during the flow measurement, the presence of ice or debris, other environmental conditions during the measurement, and the experience and subjective evaluation by the hydrographer making the measurement [@rantz1982]. The difficulty in quantifying the uncertainty in the field is related to subjectively and consistently assessing the accuracy of the measurement. 
 
 Hydrographers provide qualifiers to describe the precision of discrete flow measurements as: *Excellent,* for measurements thought to be within 2-percent of the actual flow; *Good* for measurements within 5-percent; 'Fair' for measurements within 8-percent, and *Poor* for measurements that may be more than 8 percent from the actual flow. (https://help.waterdata.usgs.gov/codes-and-parameters/discharge-measurement-quality-code). In this analysis, these qualifier were interpreted as 2-, 5-, 8-, and 12-percent standard errors, respectively.  Based on data in table 1, there were no *Excellent* measurements, 210 (`r format(210 / 230 * 100, digits = 3)` percent) *Good* measurements, 16 (`r format(16 / 230 * 100, digits = 2)` percent) *Fair* measurements, and 3 (`r format(3/230 * 100, digits = 3)` percent) *Poor* measurements. An $R_t$ series could be defined as these squared standard errors in percent, or a constant $R$ could be defined as the mean of these variances.  Alternatively, a fixed $R$ could be estimated based on the discrete flow measurements themselves within the MARSS software. All three of these approaches were tested in in the state space models.
 
@@ -1003,10 +1009,10 @@ $$ R = \bar{r} = mean(R_t[qualifier]) $$
 
 
 
-$$ R = \hat{r} \: for \ all \ t, \ where \ \hat{r} \ is \ estimated \ in \ MARSS \ based \ on \ the \ discrete \ flow \ data. $$
+$$ R = \hat{r} \: for \ all \ k, \ where \ \hat{r} \ is \ estimated \ in \ MARSS \ based \ on \ the \ discrete \ flow \ data. $$
 
 
-The design matrix ${Z}_{t}$ is a $10957\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
+The design matrix ${Z}_{k}$ is a $10957\times 5$ array series of vectors that form the design matrix. This matrix contains elements of the basis vectors computed from stage data on all days during the period of analysis. The stage data was computed as daily means of unit value stage data, except on days of discrete measurements. On days of discrete measurements, the discrete stage measurement themselves were substituted for the daily mean stage to more precisely correspond to the discrete flow measurements.     
 
 
 ### The Kalman Filter  
@@ -1015,35 +1021,38 @@ The Kalman filter [@Simon2006] is used to propagate changes in the state vector 
 
 
 **Definitions and Initial Conditions**  
-$\hat{x}_{t}^{-} =  E[x_{t}|y_1, y_2, ..., y_{t-1}]$, *a priori* state estimate at time *t*,  
-$\hat{x}_{t}^{+} =  E[x_{t}|y_1, y_2, ..., y_{t}]$, *a posteriori* state estimate at time *t*,  
+$\hat{x}_{k}^{-} =  E[x_{k}|y_1, y_2, ..., y_{k-1}]$, *a priori* state estimate at time *k*,  
+$\hat{x}_{k}^{+} =  E[x_{k}|y_1, y_2, ..., y_{k}]$, *a posteriori* state estimate at time *k*,  
 $\hat{x}_{0}^{+} = E[x_{0}]$, initial *a posteriori* state estimate at time = 0,  
-$V_{t}^{-} = E[(x_{t} - \hat{x}_t^{-}) \ (x_{t} - \hat{x}_t^{-})^{'}]$, *a priori* covariance of the state estimation error (a priori state covariance),  
-$V_{t}^{+} = E[(x_{t} - \hat{x}_t^{+}) \ (x_{t} - \hat{x}_t^{+})^{'}]$, *a posteriori* covariance of the state estimation error,  
-$V_{0}^{+} = E[(x_{0}^{+} - \hat{x}_{0}) \ (x_{0}^{+} - \hat{x}_{t})^{'}]$, initial *a posteriori* covariance of the state estimation error (a posteriori state covariance).  
+$V_{k}^{-} = E[(x_{k} - \hat{x}_t^{-}) \ (x_{k} - \hat{x}_t^{-})^{'}]$, *a priori* covariance of the state estimation error (a priori state covariance),  
+$V_{k}^{+} = E[(x_{k} - \hat{x}_t^{+}) \ (x_{k} - \hat{x}_t^{+})^{'}]$, *a posteriori* covariance of the state estimation error,  
+$V_{0}^{+} = E[(x_{0}^{+} - \hat{x}_{0}) \ (x_{0}^{+} - \hat{x}_{k})^{'}]$, initial *a posteriori* covariance of the state estimation error (a posteriori state covariance).  
    
-   
+The components of the state vector time series are not directly observable, but are estimated by use of the Kalman filter [@Simon2006]. The process covariance matrix and measurement variance series can be estimated by a maximum-likelihood algorithm for parameter estimation based on the Expectation-Maximization (EM) algorithm [@Holmes2013]. In addition, parameters of $Q$ and $R$ can also be estimated more quickly by a quasi-Newton method by use of the BFGS algorithm with the R function *optim()*.  Values in $R$ can also be specified based on a perceived percentage error associated with qualifiers specified by hydrographers making the flow measurement. 
+
+
+
    
 **Computational Sequence**  
 
-Initialize at *t* = 1   
+Initialize at *k* = 1   
 ***  
 $$
 \begin{align}
-\text{ A priori state covariance: } V_{t}^{-}  &= B \ V_{t-1}^{+} \ B^{'} + Q_{t-1} \text{,} && \\  
-\text{ Kalman gain: } K_{t} &= V_{t}^{+} \ Z_{t}^{'} \ R_{t}^{-1} \text{,} &&  \\  
-\text{ A priori state estimate: } \hat{x}_{t}^{-} &= B \ x_{t-1}^{+} \text{,} && \\  
+\text{ A priori state covariance: } V_{k}^{-}  &= B \ V_{k-1}^{+} \ B^{'} + Q_{k-1} \text{,} && \\  
+\text{ Kalman gain: } K_{k} &= V_{k}^{+} \ Z_{k}^{'} \ R_{k}^{-1} \text{,} &&  \\  
+\text{ A priori state estimate: } \hat{x}_{k}^{-} &= B \ x_{k-1}^{+} \text{,} && \\  
 \end{align}
 $$
-    Skip measurement update if $y_{t}$ = NA and increment *t* if t < max(t) = T. 
+    Skip measurement update if $y_{k}$ = NA and increment *k* if k < max(k) = K. 
 $$
 \begin{align}
-\text{ A posteriori state estimate: } \hat{x}_{t}^{+} &= \hat{x}_{t}^{-} + K_{t}(y_{t} - Z_{t} \ \hat{x}_{t}^{-}) \text{,} && \\
-\text{ A posteriori state covariance: } V_{t}^{+} &= (I_{m} - K_{t} \ Z_{t}) V_{t}^{-} && \\  
+\text{ A posteriori state estimate: } \hat{x}_{k}^{+} &= \hat{x}_{k}^{-} + K_{k}(y_{k} - Z_{k} \ \hat{x}_{k}^{-}) \text{,} && \\
+\text{ A posteriori state covariance: } V_{k}^{+} &= (I_{m} - K_{k} \ Z_{k}) V_{k}^{-} && \\  
 \text{}
 \end{align}
 $$
-    Increment *t* if t < max(t) = T.     
+    Increment *k* if k < max(k) = K.     
 ***  
 
 ### Functions used in MARSS (Multivariate Autoregressive State-Space) Modeling 
@@ -1057,7 +1066,7 @@ marssObject <- MARSS( Yt, model = list(Z = Zt, A = 'zero', R = R, U = 'zero', Q 
 
 | Model Syntax            |  Explanation                                                                                              |  
 |:------------------------|:----------------------------------------------------------------------------------------------------------|  
-|: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{t}^T$ and its standard error  See [@MARSS2020b] for a complete description of the contents of the marssObject.                                                        |  
+|: marssObject         |: The marss object produced as output from the *MARSS* function. This object contains parameter estimates for the $Q$ and $R$ matrices, Akaikes Information Criteria (AIC), which is an estimator of out of sample prediction error and used in this analysis to select a preferred model, and the log-likelihood, which is a measure of goodness of fit of a statistical model containing unknown parameters. In addition, the Kalman smoothed estimate of daily mean flow, $y_{k}^K$ and its standard error  See [@MARSS2020b] for a complete description of the contents of the marssObject.                                                        |  
 |: MARSS( ... )         |: The *MARSS* function is from the R package  **MARSS** and is used to specify the model form and estimate parameters.                                         |     
 |:  Yt                 |: Yt is a daily time series of the natural logarithms of discrete flow measurements. On days without discrete measurements Yt is missing (NA). In this analysis, Yt is 98.3 percent missing values.                                                                                         |  
 |:  Zt                 |: Zt is the design matrix formed by the daily time series of basis functions. The basis functions are derived from the CRS based for the GAM rating 18 computed using the rating table. Daily values for the basis function were predicted using daily mean stage, except on days with discrete measurements. On these days, the discrete measured stage was substituted for the daily mean value.                                                                                         |  
@@ -1070,7 +1079,7 @@ marssObject <- MARSS( Yt, model = list(Z = Zt, A = 'zero', R = R, U = 'zero', Q 
 |: tinitx=0 |: The tinitx sets the initial state vector to apply at time zero, just before the first time step with data.  
 
 
-Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@MARSS2020b].  These include *xtT*, $x_{t|T}$, which is the smoothed or offline estimate of the state vector at time *t* given all the time steps in the series *T*; *xtt*, $x_{t|t}$, is the filter estimate of the state vector at time *t* given information up to and including time *t*; and *xtt1*, $x_{t|t-1}$, is the predicted state at time *t* given information up to time *t-1*. The state vector was initialized at t = 0, $\vec{x}_{0}$, to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{t|T}$, $V_{t|t}$, and $V_{t|t-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
+Several variations of $\vec{x}_t$ are generated by function *MARSSkf* as Kalman filter and smoother output [@MARSS2020b].  These include *xtT*, $x_{k|K}$, which is the smoothed or offline estimate of the state vector at time *k* given all the time steps in the series *K*; *xtt*, $x_{k|k}$, is the filter estimate of the state vector at time *k* given information up to and including time *k*; and *xtt1*, $x_{k|k-1}$, is the predicted state at time *k* given information up to time *k-1*. The state vector was initialized at k = 0, $\vec{x}_{0}$, to the corresponding parameters estimated in a selected GAM model. Like the state vector, the covariance matrix of the state vector has three estimates in MARSS, $V_{k|K}$, $V_{k|k}$, and $V_{k|k-1}$ depending upon whether smoothed, filtered, or prediction variance are of interests. 
 
 The function *MARSSparamCIs* was used to add standard errors, and confidence intervals, for the for the maximum likelihood parameters [@MARSS2020b].  Owing to extended computational requirements, the function *MARSSboot* was used to assess parameter bias only on the selected state-space model.   
 
@@ -1918,16 +1927,16 @@ df_stage_flow_allDays <- df_stage_flow_allDays %>%
 
 Figure `r fig_no + 1` shows the time series of changes in Kalman filter and smoother estimates of basis parameters computed on the basis of model 9. Times of discrete measurements are indicated by vertical grey lines. Note that the filter estimates are shown as a step plot (horizontal lines between measurements, and vertical lines at measurements) because filter estimates only change at times of discrete measurements. In contrast, the smoother estimates change linearly between measurements because information before and after the time of estimation are used in the computation. 
 
-All parameter series followed a random walk, which is determined by the (implied) identity matrix premultipling $\vec{x}_{t-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time, and the filter and smoother estimates are in close agreement. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis. In addition, the match between filter and smoother estimates generally decreases with the higher parameter numbers. The beginning and ending points for all parameters are nearly the same. 
+All parameter series followed a random walk, which is determined by the (implied) identity matrix premultipling $\vec{x}_{k-1}$ in the state equation. The parameter associated with the intercept term, $\beta_0$, generally increases with time, and the filter and smoother estimates are in close agreement. The remaining parameters, $\beta_1 - \beta_4$, tended to take their minimum values at the end of the period of analysis. In addition, the match between filter and smoother estimates generally decreases with the higher parameter numbers. The beginning and ending points for all parameters are nearly the same. 
 
 Differences between filter and smoother estimates may reflect differences in parameter sensitivities, with greater differences indicating lower sensitivities. In particular, the increasing drift tracked similarly by both the filter and smoother estimates of $\beta_{0}$ may reflect the gradual shift to the right evident in ratings 18 through 21. The remaining parameters are likely associated with differences in the curvature at varying stages of the rating, which are less prominent. Given the relatively large differences between filtered and smoothed estimates for higher numbered parameters (like $\beta_{3} \ \beta_{4}$), fewer parameters may be needed to approximate the changes in this rating. Correlation among parameters is not thought to adversely effect estimation. At the end of the period of analysis, the maximum correlation of 0.688 occurred between parameters $\beta_0 \ and \ \beta_3$, and the minimum correlation of -0.360 occurred between parameters $\beta_2 \ and \ \beta_4$. Future research may help better understand the implications of differences between filtered and smoothed estimates, the number of parameters (knots) needed in the CRS, and the ability to localize changes in curvature of the rating. 
 
 ```{r, state_parameter_matrix, fig.height = 11, fig.width = 9 }
 
-# marss_state_tt is the estimate of the state at time t given up to time t
+# marss_state_tt is the estimate of the state at time k given up to time k
 marss_state_tt             <- data.frame( t(as.matrix( marss_kfss$xtt[,2:10958], ncol = 5, nrow = 10957)))
 
-# marss_state_tt is the estimate of the state at time t given all time T
+# marss_state_tt is the estimate of the state at time k given all time K
 marss_state_tT             <- data.frame( t(as.matrix( marss_kf$xtT[,2:10958],   ncol = 5, nrow = 10957)))
 colnames(marss_state_tT)   <- colnames(marss_state_tt)
 
@@ -2195,7 +2204,7 @@ lmtT  <- summary(with(df_DFM, lm(ytT  ~ ytm)))
 ```
 
 ** Kalman Estimators **  
-Three Kalman estimates are include in this analysis: forecast $\hat{y}_{t}^{t-1}$ , filtered $\hat{y}_{t}^{t}$, and smoothed. $\hat{y}_{t}^{T}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
+Three Kalman estimates are include in this analysis: forecast $\hat{y}_{k}^{k-1}$ , filtered $\hat{y}_{k}^{k}$, and smoothed. $\hat{y}_{k}^{K}$.  The forecast or, on days of discrete measurement, filtered estimates may be considered real-time values in the sense that as soon as the unit (or daily) stage data becomes available, a Kalman estimate of flow can be computed. The smoothed estimated, however, can be modified by discrete measurements that come after the time of estimation, and may be referred to as off-line estimates. In particular, the accuracy of smoothed forecast estimates made one or more days prior to a discrete measurement may be improved by the waiting for information contained in discrete measurements available subsequent to the time of estimation.   
  
 Overall, the agreement between discrete flow measurements and Kalman estimates of flow is close. In particular, the coefficient of determination between logarithms of measured and forecast flows ($r_{forecast}^2$) is `r format(lmtt1$adj.r.squared, digits = 4)`; between measured and filtered flows ($r_{filtered}^2$) is `r format(lmtt$adj.r.squared, digits = 4)`; and between measured and smoothed flows ($r_{smoothed}^2$) is `r format( lmtT$adj.r.squared, digits = 4)`.  Close inspection of fig. `r fig_no + 1 ` confirms, however, that the forecast measurements (red circles) are consistently further from the line of agreement than filtered estimates that are made 1 time step later. The filtered estimates show little apparent difference in accuracy, however, than the smoothed estimates.  Thus, information that is obtained on average `r format( mean(df$days_between_measurements), digits = 3)` days (fig. 4) after a discrete measurement have little effect on accuracy.  Intervening times of estimation between between discrete measurements may, however, have substantially improved accuracies.    
 
@@ -2225,7 +2234,7 @@ df_DFM[, c('Date', 'ytm', 'ytt1', 'ytt', 'ytT')] %>%
 
 ** Kalman Estimation Errors **
 
-Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{t-1}$, filtered $y_t^m - \hat{y}_t^{t}$, and smoothed errors $y_t^m - \hat{y}_t^{T}$, where $y_t$ equals the natural logarithm of flow at time $t$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $t-1$ implies one day prior to the discrete measurement, $t$ implies the time of the discrete measurement, and $T$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information at time $t$ from information at time $t+E[\Delta{t}]$, where $E[\Delta{t}]$ equals 56.6 days (fig. 4).   
+Figure `r fig_no+ 1 ` shows the distribution of Kalman forecast $y_t^m - \hat{y}_t^{k-1}$, filtered $y_t^m - \hat{y}_t^{k}$, and smoothed errors $y_t^m - \hat{y}_t^{K}$, where $y_t$ equals the natural logarithm of flow at time $k$, the superscripts refers to the information available at the time of measurement.  Here, $m$ implies the discrete flow measurement, $k-1$ implies one day prior to the discrete measurement, $k$ implies the time of the discrete measurement, and $K$ implies all time in the period of analysis. The forecast error reflect the largest uncertainty (greatest difference between the 75^th^ and 25^th^ percentiles because the forecast is based only on information available the day before the corresponding discrete measurement. The filtered estimate includes information up to and including information on the day of measurement. The smoothed estimate contains information available throughout the period of analysis, but shows little change in uncertainty from the filtered estimate.  Thus, there is little transfer of information at time $k$ from information at time $k+E[\Delta{k}]$, where $E[\Delta{k}]$ equals 56.6 days (fig. 4).   
 
 
 ```{r boxplot_err, fig.height = 6, fig.width = 7}
